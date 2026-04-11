@@ -32,11 +32,7 @@ export const useBoardStore = defineStore('board', {
     settings: {}, assignees: [], boards: [], columns: [], tasks: [], isLoaded: false,
     isModalOpen: false, editingTask: null,
     dialog: { isOpen: false, type: 'confirm', title: '', message: '', confirmText: 'OK', isDanger: false, resolve: null },
-    isSettingsOpen: false, highlightedTaskId: null,
-
-    // НОВОЕ
-    currentView: 'board', // 'board' или 'archive'
-    assigneeFilterIds: [] // Массив для фильтрации нескольких сотрудников
+    isSettingsOpen: false, highlightedTaskId: null, currentView: 'board', assigneeFilterIds: []
   }),
 
   getters: {
@@ -45,12 +41,8 @@ export const useBoardStore = defineStore('board', {
       if (!state.settings.activeBoardId) return []
       return state.columns.filter(c => c.boardId === state.settings.activeBoardId).sort((a, b) => a.order - b.order)
     },
-    // Получить все архивированные задачи текущей доски
-    archivedTasks: (state) => {
-      if (!state.settings.activeBoardId) return []
-      const boardColIds = state.columns.filter(c => c.boardId === state.settings.activeBoardId).map(c => c.id)
-      return state.tasks.filter(t => t.isArchived && boardColIds.includes(t.columnId))
-    }
+    // В архиве показываем все закрытые задачи
+    archivedTasks: (state) => state.tasks.filter(t => t.isArchived)
   },
 
   actions: {
@@ -63,10 +55,7 @@ export const useBoardStore = defineStore('board', {
       if (isDark) document.documentElement.classList.add('dark')
       else document.documentElement.classList.remove('dark')
     },
-    toggleTheme() {
-      this.settings.theme = document.documentElement.classList.contains('dark') ? 'light' : 'dark'
-      this.applyTheme(); this.saveData()
-    },
+    toggleTheme() { this.settings.theme = document.documentElement.classList.contains('dark') ? 'light' : 'dark'; this.applyTheme(); this.saveData() },
 
     async loadData() {
       try {
@@ -74,28 +63,16 @@ export const useBoardStore = defineStore('board', {
         if (data && Array.isArray(data.columns) && Array.isArray(data.tasks)) {
           data.tasks.forEach(t => {
             if (t.assigneeId !== undefined) { t.assigneeIds = t.assigneeId ? [t.assigneeId] : []; delete t.assigneeId }
-            if (!t.subtasks) t.subtasks = []
-            if (!t.tags) t.tags = []
-            if (t.isArchived === undefined) t.isArchived = false // Миграция
+            if (!t.subtasks) t.subtasks = []; if (t.color === undefined) t.color = 'default'
+            if (t.isArchived === undefined) t.isArchived = false
           })
-          data.columns.forEach(c => { if (c.wipLimit === undefined) c.wipLimit = 0 })
-          // Избегаем проблем с размером w-64 из старых сохранений
-          data.columns.forEach(c => { if (c.width === 'w-64') c.width = 'w-72' })
-
+          data.columns.forEach(c => { if (c.wipLimit === undefined) c.wipLimit = 0; if (c.width === 'w-64' || c.width === 'w-72') c.width = 'w-80' })
           this.$patch({ settings: data.settings, assignees: data.assignees || [], boards: data.boards, columns: data.columns, tasks: data.tasks })
         } else this.$patch(defaultState)
-      } catch (e) { this.$patch(defaultState) }
-      finally { this.applyTheme(); this.isLoaded = true }
+      } catch (e) { this.$patch(defaultState) } finally { this.applyTheme(); this.isLoaded = true }
     },
-    async saveData() {
-      if (!this.isLoaded) return;
-      clearTimeout(saveTimeout);
-      saveTimeout = setTimeout(async () => { await storage.set('kanban_data', { settings: this.settings, assignees: this.assignees, boards: this.boards, columns: this.columns, tasks: this.tasks }) }, 300)
-    },
-    async importWorkspace(jsonData) {
-      if (jsonData && Array.isArray(jsonData.boards)) { this.$patch({ settings: jsonData.settings || this.settings, assignees: jsonData.assignees || [], boards: jsonData.boards, columns: jsonData.columns, tasks: jsonData.tasks }); await this.saveData(); this.applyTheme(); return true }
-      return false
-    },
+    async saveData() { if (!this.isLoaded) return; clearTimeout(saveTimeout); saveTimeout = setTimeout(async () => { await storage.set('kanban_data', { settings: this.settings, assignees: this.assignees, boards: this.boards, columns: this.columns, tasks: this.tasks }) }, 300) },
+    async importWorkspace(jsonData) { if (jsonData && Array.isArray(jsonData.boards)) { this.$patch({ settings: jsonData.settings || this.settings, assignees: jsonData.assignees || [], boards: jsonData.boards, columns: jsonData.columns, tasks: jsonData.tasks }); await this.saveData(); this.applyTheme(); return true } return false },
 
     addBoard(title) {
       const newBoard = { id: generateId('board'), title, createdAt: new Date().toISOString() }
@@ -107,20 +84,23 @@ export const useBoardStore = defineStore('board', {
       const board = this.activeBoard; if(!board) return
       const newBoardId = generateId('board')
       this.boards.push({ id: newBoardId, title: board.title + ' (Copy)', createdAt: new Date().toISOString() })
-      const colMapping = {}
-      this.columns.filter(c => c.boardId === board.id).forEach(c => {
-         const newColId = generateId('col'); colMapping[c.id] = newColId
-         this.columns.push({ ...c, id: newColId, boardId: newBoardId })
-      })
+      const colMapping = {}; this.columns.filter(c => c.boardId === board.id).forEach(c => { const newColId = generateId('col'); colMapping[c.id] = newColId; this.columns.push({ ...c, id: newColId, boardId: newBoardId }) })
       this.tasks.filter(t => colMapping[t.columnId]).forEach(t => { this.tasks.push({ ...t, id: generateId('task'), columnId: colMapping[t.columnId] }) })
       this.settings.activeBoardId = newBoardId
     },
-    moveBoard(boardId, direction) {
-      const idx = this.boards.findIndex(b => b.id === boardId)
-      if (idx === -1) return
-      const newIdx = idx + direction
-      if (newIdx >= 0 && newIdx < this.boards.length) {
-        const temp = this.boards[idx]; this.boards[idx] = this.boards[newIdx]; this.boards[newIdx] = temp
+    moveBoard(boardId, direction) { const idx = this.boards.findIndex(b => b.id === boardId); if (idx === -1) return; const newIdx = idx + direction; if (newIdx >= 0 && newIdx < this.boards.length) { const temp = this.boards[idx]; this.boards[idx] = this.boards[newIdx]; this.boards[newIdx] = temp } },
+
+    // НОВОЕ: Удаление доски
+    async deleteActiveBoard() {
+      const confirmed = await this.requestDialog({ type: 'confirm', title: 'Delete Board', message: 'Are you sure? Archived tasks will be saved, but active columns and tasks will be deleted.', confirmText: 'Delete Board', isDanger: true })
+      if(confirmed) {
+         const boardId = this.settings.activeBoardId
+         const colIds = this.columns.filter(c => c.boardId === boardId).map(c => c.id)
+         // Оставляем только заархивированные задачи этой доски и задачи других досок
+         this.tasks = this.tasks.filter(t => t.isArchived || !colIds.includes(t.columnId))
+         this.columns = this.columns.filter(c => c.boardId !== boardId)
+         this.boards = this.boards.filter(b => b.id !== boardId)
+         this.settings.activeBoardId = this.boards.length > 0 ? this.boards[0].id : null
       }
     },
 
@@ -129,39 +109,42 @@ export const useBoardStore = defineStore('board', {
     deleteColumn(id) { this.columns = this.columns.filter(c => c.id !== id); this.tasks = this.tasks.filter(t => t.columnId !== id) },
     toggleColumnArchive(columnId) { const col = this.columns.find(c => c.id === columnId); if (col) col.isArchive = !col.isArchive },
     setColumnWip(columnId, limit) { const col = this.columns.find(c => c.id === columnId); if (col) col.wipLimit = parseInt(limit) || 0 },
-    moveColumn(columnId, direction) {
-      const columns = this.activeColumns
-      const idx = columns.findIndex(c => c.id === columnId)
-      if (idx === -1) return
-      const newIdx = idx + direction
-      if (newIdx >= 0 && newIdx < columns.length) {
-        const tempOrder = columns[idx].order; columns[idx].order = columns[newIdx].order; columns[newIdx].order = tempOrder
-      }
-    },
+    moveColumn(columnId, direction) { const columns = this.activeColumns; const idx = columns.findIndex(c => c.id === columnId); if (idx === -1) return; const newIdx = idx + direction; if (newIdx >= 0 && newIdx < columns.length) { const tempOrder = columns[idx].order; columns[idx].order = columns[newIdx].order; columns[newIdx].order = tempOrder } },
 
-    // НОВОЕ: Логика Глобального Архива
+    // НОВОЕ: Архивация
     archiveTask(taskId) {
       const task = this.tasks.find(t => t.id === taskId)
-      if (task) task.isArchived = true
+      if (task) {
+        task.isArchived = true; task.archivedAt = new Date().toISOString()
+        const col = this.columns.find(c => c.id === task.columnId)
+        if (col) task.originalBoardId = col.boardId
+      }
     },
     unarchiveTask(taskId) {
       const task = this.tasks.find(t => t.id === taskId)
-      if (task) task.isArchived = false
+      if (task && this.activeColumns.length > 0) {
+        task.isArchived = false
+        // Возвращаем в первую колонку текущей открытой доски
+        task.columnId = this.activeColumns[0].id
+      }
     },
     archiveAllInColumn(columnId) {
-      this.tasks.filter(t => t.columnId === columnId && !t.isArchived).forEach(t => t.isArchived = true)
+      const col = this.columns.find(c => c.id === columnId)
+      this.tasks.filter(t => t.columnId === columnId && !t.isArchived).forEach(t => {
+        t.isArchived = true; t.archivedAt = new Date().toISOString(); t.originalBoardId = col ? col.boardId : null
+      })
     },
 
     openNewTaskModal(columnId = null) {
       const targetColId = columnId || (this.activeColumns[0]?.id)
       if (!targetColId) return
-      this.editingTask = { id: generateId('task'), columnId: targetColId, assigneeIds: [], tags: [], subtasks: [], title: '', description: '', order: this.tasks.filter(t => t.columnId === targetColId).length, createdAt: new Date().toISOString(), closedAt: null, closingComment: null, isNew: true, isArchived: false }
+      this.editingTask = { id: generateId('task'), columnId: targetColId, assigneeIds: [], color: 'default', subtasks: [], title: '', description: '', order: this.tasks.filter(t => t.columnId === targetColId).length, createdAt: new Date().toISOString(), closedAt: null, closingComment: null, isNew: true, isArchived: false }
       this.isModalOpen = true
     },
     openEditTaskModal(task) {
       this.editingTask = JSON.parse(JSON.stringify(task));
       if(!this.editingTask.assigneeIds) this.editingTask.assigneeIds = [];
-      if(!this.editingTask.tags) this.editingTask.tags = [];
+      if(!this.editingTask.color) this.editingTask.color = 'default';
       if(!this.editingTask.subtasks) this.editingTask.subtasks = [];
       this.isModalOpen = true
     },
@@ -183,15 +166,7 @@ export const useBoardStore = defineStore('board', {
 
     addAssignee() { const newUser = { id: generateId('user'), name: 'New Employee', initials: 'EE', color: '#6366f1', avatar: null }; this.assignees.push(newUser); return newUser },
     updateAssignee(id, updates) { const i = this.assignees.findIndex(a => a.id === id); if (i !== -1) this.assignees[i] = { ...this.assignees[i], ...updates } },
-    deleteAssignee(id) {
-      this.tasks.forEach(t => { if (t.assigneeIds) t.assigneeIds = t.assigneeIds.filter(aId => aId !== id) });
-      this.assignees = this.assignees.filter(a => a.id !== id);
-      this.assigneeFilterIds = this.assigneeFilterIds.filter(fId => fId !== id);
-    },
-    toggleAssigneeFilter(id) {
-      const idx = this.assigneeFilterIds.indexOf(id)
-      if (idx === -1) this.assigneeFilterIds.push(id)
-      else this.assigneeFilterIds.splice(idx, 1)
-    }
+    deleteAssignee(id) { this.tasks.forEach(t => { if (t.assigneeIds) t.assigneeIds = t.assigneeIds.filter(aId => aId !== id) }); this.assignees = this.assignees.filter(a => a.id !== id); this.assigneeFilterIds = this.assigneeFilterIds.filter(fId => fId !== id); },
+    toggleAssigneeFilter(id) { const idx = this.assigneeFilterIds.indexOf(id); if (idx === -1) this.assigneeFilterIds.push(id); else this.assigneeFilterIds.splice(idx, 1) }
   }
 })

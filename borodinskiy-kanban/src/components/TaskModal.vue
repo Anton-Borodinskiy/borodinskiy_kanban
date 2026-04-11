@@ -8,7 +8,6 @@ import { TrashIcon, PlusIcon } from '@heroicons/vue/24/outline'
 const store = useBoardStore()
 const descTab = ref('edit')
 const commentTab = ref('edit')
-const tagInput = ref('')
 
 const isArchiveColumn = computed(() => {
   if (!store.editingTask) return false
@@ -25,24 +24,20 @@ const toggleAssignee = (id) => {
   else store.editingTask.assigneeIds.splice(idx, 1)
 }
 
-// НОВОЕ: Теги
-const addTag = () => {
-  const val = tagInput.value.trim().toUpperCase()
-  if (val && !store.editingTask.tags.includes(val)) store.editingTask.tags.push(val)
-  tagInput.value = ''
-}
-const removeTag = (idx) => store.editingTask.tags.splice(idx, 1)
-
-// НОВОЕ: Сабтаски
 const addSubtask = () => { store.editingTask.subtasks.push({ title: '', done: false }) }
 const removeSubtask = (idx) => store.editingTask.subtasks.splice(idx, 1)
-
-const save = () => {
-  if (!store.editingTask.title.trim()) return
-  store.saveTask(store.editingTask)
-}
-
+const save = () => { if (!store.editingTask.title.trim()) return; store.saveTask(store.editingTask) }
 const remove = () => { if (confirm('Are you sure you want to delete this task?')) store.deleteTask(store.editingTask.id) }
+
+// Палитра цветов
+const taskColors = [
+  { id: 'default', class: 'bg-gray-200 dark:bg-gray-600' },
+  { id: 'red', class: 'bg-red-400' },
+  { id: 'green', class: 'bg-green-400' },
+  { id: 'blue', class: 'bg-blue-400' },
+  { id: 'yellow', class: 'bg-yellow-400' },
+  { id: 'purple', class: 'bg-purple-400' },
+]
 </script>
 
 <template>
@@ -73,13 +68,15 @@ const remove = () => { if (confirm('Are you sure you want to delete this task?')
           </div>
 
           <div>
-             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Labels / Tags</label>
-             <div class="flex flex-wrap gap-2 mb-2">
-               <span v-for="(tag, idx) in store.editingTask.tags" :key="idx" class="text-xs font-bold uppercase px-2 py-1 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center gap-1">
-                 {{ tag }} <button @click="removeTag(idx)" class="hover:text-red-500">&times;</button>
-               </span>
+             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Task Color</label>
+             <div class="flex flex-wrap gap-2">
+                <button
+                  v-for="color in taskColors" :key="color.id"
+                  @click="store.editingTask.color = color.id"
+                  :class="['w-8 h-8 rounded-full border-2 transition-transform', color.class, store.editingTask.color === color.id ? 'border-gray-900 dark:border-white scale-110 shadow-md' : 'border-transparent hover:scale-105 opacity-70']"
+                  :title="color.id"
+                ></button>
              </div>
-             <input v-model="tagInput" @keyup.enter="addTag" type="text" class="w-full text-sm rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 p-1 border focus:border-indigo-500" placeholder="Type and press Enter...">
           </div>
         </div>
 
