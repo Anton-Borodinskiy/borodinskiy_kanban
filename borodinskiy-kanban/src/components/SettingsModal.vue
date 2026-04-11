@@ -5,7 +5,7 @@ import AssigneeManager from './AssigneeManager.vue'
 import { ArrowDownTrayIcon, ArrowUpTrayIcon, ExclamationTriangleIcon, PhotoIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 
 const store = useBoardStore()
-const activeTab = ref('boards')
+const activeTab = ref('team')
 const fileInput = ref(null)
 
 const exportData = () => {
@@ -45,14 +45,19 @@ const handleBgUpload = (event) => {
 
       <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex justify-between items-center">
         <div class="flex gap-4">
-          <button @click="activeTab = 'boards'" :class="['text-lg font-semibold pb-1 border-b-2 transition-colors', activeTab === 'boards' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']">Boards</button>
-          <button @click="activeTab = 'team'" :class="['text-lg font-semibold pb-1 border-b-2 transition-colors', activeTab === 'team' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']">Team</button>
-          <button @click="activeTab = 'data'" :class="['text-lg font-semibold pb-1 border-b-2 transition-colors', activeTab === 'data' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']">Data</button>
+          <button @click="activeTab = 'team'" :class="['text-lg font-semibold pb-1 border-b-2 transition-colors', activeTab === 'team' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']">Team & Assignees</button>
+          <button @click="activeTab = 'boards'" :class="['text-lg font-semibold pb-1 border-b-2 transition-colors', activeTab === 'boards' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']">Board Backgrounds</button>
+          <button @click="activeTab = 'data'" :class="['text-lg font-semibold pb-1 border-b-2 transition-colors', activeTab === 'data' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']">Data (Export/Import)</button>
         </div>
         <button @click="store.closeSettings" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl leading-none">&times;</button>
       </div>
 
       <div class="p-6 overflow-y-auto flex-1">
+
+        <div v-if="activeTab === 'team'">
+          <p class="text-sm text-gray-500 mb-4">Manage team members. Added members can be assigned to tasks.</p>
+          <AssigneeManager />
+        </div>
 
         <div v-if="activeTab === 'boards'" class="space-y-6">
           <div>
@@ -67,7 +72,7 @@ const handleBgUpload = (event) => {
                <div v-else class="w-32 h-20 rounded-lg bg-gray-100 dark:bg-gray-700 border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-400">None</div>
 
                <div class="flex flex-col justify-center gap-2">
-                 <label class="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-sm font-medium px-3 py-1.5 rounded cursor-pointer hover:bg-gray-50 transition flex items-center gap-2">
+                 <label class="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium px-3 py-1.5 rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-600 transition flex items-center gap-2">
                    <PhotoIcon class="w-4 h-4" /> Upload Image
                    <input type="file" accept="image/*" class="hidden" @change="handleBgUpload">
                  </label>
@@ -83,24 +88,25 @@ const handleBgUpload = (event) => {
           </div>
         </div>
 
-        <div v-if="activeTab === 'team'">
-          <p class="text-sm text-gray-500 mb-4">Manage team members.</p>
-          <AssigneeManager />
-        </div>
-
         <div v-if="activeTab === 'data'" class="space-y-6">
-          <div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200">
-            <h4 class="font-medium flex items-center gap-2 mb-2"><ArrowDownTrayIcon class="w-5 h-5" /> Export</h4>
-            <button @click="exportData" class="bg-blue-600 text-white py-2 px-4 rounded">Download Backup</button>
+          <div class="bg-blue-50 dark:bg-blue-900/20 p-5 rounded-lg border border-blue-200 dark:border-blue-800">
+            <h4 class="font-bold text-blue-900 dark:text-blue-300 flex items-center gap-2 mb-2"><ArrowDownTrayIcon class="w-5 h-5" /> Export Workspace Backup</h4>
+            <p class="text-sm text-blue-700 dark:text-blue-400 mb-4">Download a complete JSON file containing all your current boards, columns, tasks, global archives, and team members. Use this file to safely backup your progress or transfer your workspace to another browser.</p>
+            <button @click="exportData" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-5 rounded shadow transition-colors">Download JSON Backup</button>
           </div>
-          <div class="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200">
-            <h4 class="font-medium flex items-center gap-2 mb-2"><ArrowUpTrayIcon class="w-5 h-5" /> Import</h4>
+
+          <div class="bg-yellow-50 dark:bg-yellow-900/20 p-5 rounded-lg border border-yellow-200 dark:border-yellow-800">
+            <h4 class="font-bold text-yellow-900 dark:text-yellow-300 flex items-center gap-2 mb-2"><ArrowUpTrayIcon class="w-5 h-5" /> Import Workspace Backup</h4>
+            <p class="text-sm text-yellow-700 dark:text-yellow-400 mb-2">Restore your workspace from a previously saved JSON file.</p>
+            <p class="text-sm text-yellow-800 dark:text-yellow-500 font-bold mb-4">⚠️ Warning: Importing will completely overwrite your current local data!</p>
             <input type="file" accept=".json" class="hidden" ref="fileInput" @change="handleImport">
-            <button @click="fileInput.click()" class="bg-yellow-600 text-white py-2 px-4 rounded">Select JSON</button>
+            <button @click="fileInput.click()" class="bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-medium py-2 px-5 rounded shadow transition-colors">Select JSON to Import...</button>
           </div>
-          <div class="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 mt-6">
-            <h4 class="font-medium text-red-900 flex items-center gap-2 mb-2"><ExclamationTriangleIcon class="w-5 h-5" /> Danger Zone</h4>
-            <button @click="store.factoryReset()" class="bg-red-600 text-white py-2 px-4 rounded">Delete All Data</button>
+
+          <div class="bg-red-50 dark:bg-red-900/20 p-5 rounded-lg border border-red-200 dark:border-red-800 mt-6">
+            <h4 class="font-bold text-red-900 dark:text-red-300 flex items-center gap-2 mb-2"><ExclamationTriangleIcon class="w-5 h-5" /> Danger Zone: Factory Reset</h4>
+            <p class="text-sm text-red-700 dark:text-red-400 mb-4">This action will permanently delete all boards, tasks, archives, and settings from your browser's local storage. This action cannot be undone.</p>
+            <button @click="store.factoryReset()" class="bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 px-5 rounded shadow transition-colors">Delete All Data</button>
           </div>
         </div>
       </div>

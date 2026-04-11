@@ -76,7 +76,7 @@ onMounted(() => {
             <div class="p-2 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center"><span class="text-xs font-bold text-gray-500 uppercase">Team</span><button @click="store.assigneeFilterIds = []" class="text-xs text-blue-500 hover:underline">Clear</button></div>
             <div class="max-h-64 overflow-y-auto p-2 space-y-1">
               <label v-for="user in store.assignees" :key="user.id" class="flex items-center gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer">
-                <input type="checkbox" :checked="store.assigneeFilterIds.includes(user.id)" @change="store.toggleAssigneeFilter(user.id)" class="rounded text-blue-600 border-gray-300 bg-gray-100 dark:bg-gray-700">
+                <input type="checkbox" :checked="store.assigneeFilterIds.includes(user.id)" @change="store.toggleAssigneeFilter(user.id)" class="rounded text-blue-600 border-gray-300 bg-gray-100 dark:bg-gray-700 dark:border-gray-600">
                 <div class="w-6 h-6 rounded-full overflow-hidden shrink-0"><img v-if="user.avatar" :src="user.avatar" class="w-full h-full object-cover" /><div v-else class="w-full h-full flex items-center justify-center text-[10px] font-bold text-white" :style="{ backgroundColor: user.color }">{{ user.initials }}</div></div>
                 <span class="text-sm text-gray-700 dark:text-gray-200">{{ user.name }}</span>
               </label>
@@ -92,9 +92,13 @@ onMounted(() => {
             <option value="current" class="dark:bg-gray-700">Board</option>
             <option value="all" class="dark:bg-gray-700">Global</option>
           </select>
-          <div v-if="searchResults.length > 0" class="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-xl max-h-96 overflow-y-auto z-50">
-            <div v-for="task in searchResults" :key="task.id" @click="navigateToTask(task)" class="p-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer border-b">
+
+          <div v-if="searchResults.length > 0" class="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-xl p-2 max-h-96 overflow-y-auto z-50">
+            <div v-for="task in searchResults" :key="task.id" @click="navigateToTask(task)" class="p-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer rounded-lg mb-1 last:mb-0 transition-colors">
               <div class="text-sm font-medium text-gray-900 dark:text-white">{{ task.title }}</div>
+              <div class="text-[10px] text-blue-500 font-bold uppercase tracking-wider mt-1">
+                Board: {{ store.boards.find(b => b.id === (store.columns.find(c => c.id === task.columnId)?.boardId))?.title }}
+              </div>
             </div>
           </div>
         </div>

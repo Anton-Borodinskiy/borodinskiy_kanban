@@ -1,6 +1,6 @@
 <script setup>
 import { useBoardStore } from '../stores/boardStore'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { TrashIcon, PlusIcon } from '@heroicons/vue/24/outline'
@@ -8,7 +8,11 @@ import { TrashIcon, PlusIcon } from '@heroicons/vue/24/outline'
 const store = useBoardStore()
 const descTab = ref('edit')
 const commentTab = ref('edit')
-const customColor = ref('#ffffff') // Для палитры
+const customColor = ref('#ffffff')
+
+watch(() => store.editingTask?.color, (newVal) => {
+  if (newVal && newVal.startsWith('#')) customColor.value = newVal
+}, { immediate: true })
 
 const isArchiveColumn = computed(() => {
   if (!store.editingTask) return false
@@ -30,13 +34,14 @@ const removeSubtask = (idx) => store.editingTask.subtasks.splice(idx, 1)
 const save = () => { if (!store.editingTask.title.trim()) return; store.saveTask(store.editingTask) }
 const remove = () => { if (confirm('Are you sure you want to delete this task?')) store.deleteTask(store.editingTask.id) }
 
+// ИСПРАВЛЕНИЕ: Заменен purple на violet для гарантии компиляции
 const taskColors = [
   { id: 'default', class: 'bg-gray-200 dark:bg-gray-600' },
   { id: 'red', class: 'bg-red-400' },
   { id: 'green', class: 'bg-green-400' },
   { id: 'blue', class: 'bg-blue-400' },
   { id: 'yellow', class: 'bg-yellow-400' },
-  { id: 'purple', class: 'bg-purple-400' },
+  { id: 'purple', class: 'bg-violet-400' },
 ]
 
 const handleCustomColor = (e) => { store.editingTask.color = e.target.value }
@@ -54,7 +59,7 @@ const handleCustomColor = (e) => { store.editingTask.color = e.target.value }
       <div class="p-6 overflow-y-auto flex-1 space-y-5">
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title *</label>
-          <input v-model="store.editingTask.title" @keyup.enter="save" type="text" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" placeholder="What needs to be done?" autofocus>
+          <input v-model="store.editingTask.title" @keyup.enter="save" type="text" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border outline-none" placeholder="What needs to be done?" autofocus>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -74,15 +79,15 @@ const handleCustomColor = (e) => { store.editingTask.color = e.target.value }
                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Task Color</label>
                <div class="flex flex-wrap items-center gap-2 mb-4">
                   <button v-for="color in taskColors" :key="color.id" @click="store.editingTask.color = color.id" :class="['w-8 h-8 rounded-full border-2 transition-transform', color.class, store.editingTask.color === color.id ? 'border-gray-900 dark:border-white scale-110 shadow-md' : 'border-transparent hover:scale-105 opacity-70']" :title="color.id"></button>
-                  <div class="relative w-8 h-8 rounded-full overflow-hidden border-2 cursor-pointer shadow-sm hover:scale-105 transition-transform" :class="store.editingTask.color?.startsWith('#') ? 'border-gray-900 dark:border-white scale-110' : 'border-transparent opacity-70'" title="Custom Color" :style="{ backgroundColor: store.editingTask.color?.startsWith('#') ? store.editingTask.color : customColor }">
-                     <input type="color" v-model="customColor" @input="handleCustomColor" class="absolute -inset-2 w-12 h-12 opacity-0 cursor-pointer">
-                  </div>
+                  <label class="w-8 h-8 rounded-full border-2 cursor-pointer shadow-sm transition-transform flex items-center justify-center relative overflow-hidden" :class="store.editingTask.color?.startsWith('#') ? 'border-gray-900 dark:border-white scale-110' : 'border-dashed border-gray-400 opacity-70 hover:scale-105'" title="Pick Custom Color" :style="{ background: store.editingTask.color?.startsWith('#') ? store.editingTask.color : 'conic-gradient(from 90deg, red, yellow, green, blue, purple, red)' }">
+                     <input type="color" v-model="customColor" @input="handleCustomColor" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                  </label>
                </div>
              </div>
 
              <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
-                <input v-model="store.editingTask.dueDate" type="date" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white p-2 border focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                <input v-model="store.editingTask.dueDate" type="date" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white p-2 border focus:ring-2 focus:ring-blue-500 cursor-pointer outline-none">
              </div>
           </div>
         </div>
@@ -95,7 +100,7 @@ const handleCustomColor = (e) => { store.editingTask.color = e.target.value }
               <button @click="descTab = 'preview'" :class="['px-3 py-1', descTab === 'preview' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700']">Preview</button>
             </div>
           </div>
-          <textarea v-if="descTab === 'edit'" v-model="store.editingTask.description" rows="5" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white p-2 border resize-y" placeholder="Add details..."></textarea>
+          <textarea v-if="descTab === 'edit'" v-model="store.editingTask.description" rows="5" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white p-2 border resize-y outline-none focus:ring-2 focus:ring-blue-500" placeholder="Add details..."></textarea>
           <div v-else class="prose prose-sm dark:prose-invert max-w-none p-3 border border-dashed border-gray-300 dark:border-gray-600 rounded-md min-h-[120px] bg-gray-50 dark:bg-black/20" v-html="renderMarkdown(store.editingTask.description)"></div>
         </div>
 
@@ -121,7 +126,7 @@ const handleCustomColor = (e) => { store.editingTask.color = e.target.value }
               <button @click="commentTab = 'preview'" :class="['px-3 py-1', commentTab === 'preview' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700']">Preview</button>
             </div>
           </div>
-          <textarea v-if="commentTab === 'edit'" v-model="store.editingTask.closingComment" rows="2" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white p-2 border resize-y" placeholder="Final notes..."></textarea>
+          <textarea v-if="commentTab === 'edit'" v-model="store.editingTask.closingComment" rows="2" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white p-2 border resize-y outline-none focus:ring-2 focus:ring-blue-500" placeholder="Final notes..."></textarea>
           <div v-else class="prose prose-sm dark:prose-invert max-w-none p-3 border border-dashed border-gray-300 dark:border-gray-600 rounded-md min-h-[50px] bg-white/50 dark:bg-black/20" v-html="renderMarkdown(store.editingTask.closingComment)"></div>
         </div>
       </div>
@@ -130,7 +135,7 @@ const handleCustomColor = (e) => { store.editingTask.color = e.target.value }
         <button v-if="!store.editingTask.isNew" @click="remove" class="text-red-600 hover:text-red-700 font-medium text-sm px-4 py-2">Delete</button>
         <div v-else></div>
         <div class="flex gap-3">
-          <button @click="store.closeModal" class="text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 font-medium text-sm px-4 py-2 rounded-md">Cancel</button>
+          <button @click="store.closeModal" class="text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 font-medium text-sm px-4 py-2 rounded-md transition-colors">Cancel</button>
           <button @click="save" class="bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-6 py-2 rounded-md shadow-sm disabled:opacity-50" :disabled="!store.editingTask.title.trim()">Save</button>
         </div>
       </div>
