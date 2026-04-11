@@ -2,12 +2,21 @@ import { defineStore } from 'pinia'
 
 const storage = {
   async get(key) {
-    if (typeof chrome !== 'undefined' && chrome.storage) return (await chrome.storage.local.get(key))[key]
-    return JSON.parse(localStorage.getItem(key))
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      const data = await chrome.storage.local.get(key)
+      return data[key]
+    }
+    const localData = localStorage.getItem(key)
+    return localData ? JSON.parse(localData) : null
   },
   async set(key, value) {
-    if (typeof chrome !== 'undefined' && chrome.storage) await chrome.storage.local.set({ [key]: value })
-    else localStorage.setItem(key, JSON.stringify(value))
+    // ВАЖНО: Очищаем Vue-прокси перед сохранением, иначе Chrome выдает DataCloneError
+    const rawValue = JSON.parse(JSON.stringify(value))
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      await chrome.storage.local.set({ [key]: rawValue })
+    } else {
+      localStorage.setItem(key, JSON.stringify(rawValue))
+    }
   }
 }
 
@@ -23,6 +32,8 @@ const defaultState = {
 }
 
 const generateId = (prefix) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+
+let saveTimeout = null; // Для оптимизации сохранений
 
 export const useBoardStore = defineStore('board', {
   state: () => ({
@@ -53,7 +64,6 @@ export const useBoardStore = defineStore('board', {
     openSettings() { this.isSettingsOpen = true },
     closeSettings() { this.isSettingsOpen = false },
 
-    // --- ИСПРАВЛЕНИЕ ТЕМЫ: Мгновенное применение ---
     applyTheme() {
       const isDark = this.settings.theme === 'dark' || (this.settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
       if (isDark) document.documentElement.classList.add('dark')
@@ -70,7 +80,6 @@ export const useBoardStore = defineStore('board', {
       try {
         const data = await storage.get('kanban_data')
         if (data && Array.isArray(data.columns) && Array.isArray(data.tasks)) {
-          // МИГРАЦИЯ: Переносим старый assigneeId (один) в assigneeIds (массив)
           data.tasks.forEach(t => {
             if (t.assigneeId !== undefined) {
               t.assigneeIds = t.assigneeId ? [t.assigneeId] : []
@@ -81,14 +90,21 @@ export const useBoardStore = defineStore('board', {
         } else this.$patch(defaultState)
       } catch (e) { this.$patch(defaultState) }
       finally {
-        this.applyTheme() // Применяем тему до отображения UI
+        this.applyTheme()
         this.isLoaded = true
       }
     },
+
+    // ИСПРАВЛЕНИЕ: Защита от перезаписи при старте и оптимизация (debounce)
     async saveData() {
-      const { settings, assignees, boards, columns, tasks } = this.$state
-      await storage.set('kanban_data', { settings, assignees, boards, columns, tasks })
+      if (!this.isLoaded) return;
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(async () => {
+        const { settings, assignees, boards, columns, tasks } = this.$state
+        await storage.set('kanban_data', { settings, assignees, boards, columns, tasks })
+      }, 300)
     },
+
     async importWorkspace(jsonData) {
       if (jsonData && Array.isArray(jsonData.boards)) {
         this.$patch({ settings: jsonData.settings || this.settings, assignees: jsonData.assignees || [], boards: jsonData.boards, columns: jsonData.columns, tasks: jsonData.tasks })
@@ -104,7 +120,6 @@ export const useBoardStore = defineStore('board', {
       this.addColumn(newBoard.id, 'To Do', false)
       this.addColumn(newBoard.id, 'Done (Archive)', true)
     },
-    // НОВОЕ: Переименование доски
     renameBoard(id, newTitle) {
       const board = this.boards.find(b => b.id === id)
       if (board) board.title = newTitle
@@ -114,14 +129,11 @@ export const useBoardStore = defineStore('board', {
       if(!board) return
       const newBoardId = generateId('board')
       this.boards.push({ id: newBoardId, title: board.title + ' (Copy)', createdAt: new Date().toISOString() })
-
       const colMapping = {}
       this.columns.filter(c => c.boardId === board.id).forEach(c => {
-         const newColId = generateId('col')
-         colMapping[c.id] = newColId
+         const newColId = generateId('col'); colMapping[c.id] = newColId
          this.columns.push({ ...c, id: newColId, boardId: newBoardId })
       })
-
       this.tasks.filter(t => colMapping[t.columnId]).forEach(t => {
          this.tasks.push({ ...t, id: generateId('task'), columnId: colMapping[t.columnId] })
       })
@@ -141,7 +153,7 @@ export const useBoardStore = defineStore('board', {
     },
     openEditTaskModal(task) {
       this.editingTask = JSON.parse(JSON.stringify(task));
-      if(!this.editingTask.assigneeIds) this.editingTask.assigneeIds = []; // Безопасность
+      if(!this.editingTask.assigneeIds) this.editingTask.assigneeIds = [];
       this.isModalOpen = true
     },
     closeModal() { this.isModalOpen = false; this.editingTask = null },

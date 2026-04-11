@@ -43,7 +43,10 @@ const renameActiveBoard = async () => {
 
 onMounted(() => {
   store.loadData()
-  store.$subscribe(() => store.saveData())
+  // ИСПРАВЛЕНИЕ: Вызываем saveData только если данные уже успешно загружены
+  store.$subscribe(() => {
+    if (store.isLoaded) store.saveData()
+  })
 })
 </script>
 
