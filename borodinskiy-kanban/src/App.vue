@@ -5,7 +5,7 @@ import Board from './components/Board.vue'
 import TaskModal from './components/TaskModal.vue'
 import GlobalDialog from './components/GlobalDialog.vue'
 import SettingsModal from './components/SettingsModal.vue' // ДОБАВЛЕНО
-import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon, Cog6ToothIcon } from '@heroicons/vue/24/outline' // ДОБАВЛЕНО
+import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon, Cog6ToothIcon, ViewColumnsIcon } from '@heroicons/vue/24/outline'
 
 const store = useBoardStore()
 const searchQuery = ref('')
@@ -44,12 +44,18 @@ onMounted(() => {
 <template>
   <div v-if="store.isLoaded" class="h-screen flex flex-col bg-gray-50 dark:bg-gray-900 overflow-hidden text-gray-900 dark:text-gray-100">
     <header class="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3 flex justify-between items-center z-10">
-      <div class="flex items-center gap-4">
-        <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400">
-          Borodinskiy Kanban
-        </h1>
+<div class="flex items-center gap-4">
 
-        <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-md pr-1">
+        <div class="flex items-center gap-3">
+          <div class="bg-gradient-to-br from-blue-600 to-indigo-600 p-1.5 rounded-lg shadow-sm">
+            <ViewColumnsIcon class="w-5 h-5 text-white" />
+          </div>
+          <h1 class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white drop-shadow-sm hidden sm:block">
+            Borodinskiy <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400">Kanban</span>
+          </h1>
+        </div>
+
+        <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-md pr-1 ml-2">
           <select
             v-model="store.settings.activeBoardId"
             class="bg-transparent border-none text-sm py-1.5 pl-3 pr-8 focus:ring-2 focus:ring-blue-500 cursor-pointer text-gray-900 dark:text-white"

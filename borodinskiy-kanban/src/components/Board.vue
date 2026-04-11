@@ -101,11 +101,19 @@ const removeColumn = async (id) => {
         >
           <div class="flex justify-between items-start mb-2">
             <h4 class="font-medium text-gray-900 dark:text-white text-sm leading-snug">{{ task.title }}</h4>
-            <div v-if="task.assigneeId" class="shrink-0 ml-2">
-              <div v-if="getAssignee(task.assigneeId)?.avatar" class="w-6 h-6 rounded-full overflow-hidden border border-white dark:border-gray-800 shadow-sm">
+            <div v-if="task.assigneeId" class="shrink-0 ml-3">
+              <div
+                v-if="getAssignee(task.assigneeId)?.avatar"
+                class="w-8 h-8 rounded-full overflow-hidden border-2 border-white dark:border-gray-800 shadow-sm"
+              >
                 <img :src="getAssignee(task.assigneeId).avatar" class="w-full h-full object-cover" />
               </div>
-              <div v-else class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm" :style="{ backgroundColor: getAssignee(task.assigneeId)?.color || '#999' }" :title="getAssignee(task.assigneeId)?.name">
+              <div
+                v-else
+                class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm border-2 border-white dark:border-gray-800"
+                :style="{ backgroundColor: getAssignee(task.assigneeId)?.color || '#999' }"
+                :title="getAssignee(task.assigneeId)?.name"
+              >
                 {{ getAssignee(task.assigneeId)?.initials }}
               </div>
             </div>

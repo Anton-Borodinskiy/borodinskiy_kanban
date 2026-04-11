@@ -35,7 +35,7 @@ const handleCancel = () => store.closeDialog(false)
 </script>
 
 <template>
-  <div v-if="store.dialog.isOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @click.self="handleCancel">
+  <div v-if="store.dialog.isOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @mousedown.self="handleCancel">
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm flex flex-col transform transition-all">
 
       <div class="p-6">
