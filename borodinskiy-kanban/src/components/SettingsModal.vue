@@ -9,23 +9,57 @@ const activeTab = ref('team')
 const fileInput = ref(null)
 
 const exportData = () => {
-  const data = { settings: store.settings, assignees: store.assignees, boards: store.boards, columns: store.columns, tasks: store.tasks }
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url
+  // ИСПРАВЛЕНИЕ: Глубокая очистка данных от Vue Proxy перед скачиванием
+  const cleanData = JSON.parse(JSON.stringify({
+    settings: store.settings,
+    assignees: store.assignees,
+    boards: store.boards,
+    columns: store.columns,
+    tasks: store.tasks
+  }))
+
+  const blob = new Blob([JSON.stringify(cleanData, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url
   a.download = `borodinskiy-backup-${new Date().toISOString().split('T')[0]}.json`
-  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url)
 }
 
 const handleImport = (event) => {
-  const file = event.target.files[0]; if (!file) return
+  const file = event.target.files[0];
+  if (!file) return
+
   const reader = new FileReader()
   reader.onload = async (e) => {
+    let json = null
+
+    // 1. Проверяем валидность самого JSON файла
     try {
-      const json = JSON.parse(e.target.result)
+      json = JSON.parse(e.target.result)
+    } catch (err) {
+      store.requestDialog({ type: 'confirm', title: 'Parse Error', message: 'The selected file is not a valid JSON.', confirmText: 'Close', isDanger: true })
+      event.target.value = ''
+      return
+    }
+
+    // 2. Пытаемся применить структуру к нашему Канбану
+    try {
       const success = await store.importWorkspace(json)
-      if (success) { store.requestDialog({ type: 'confirm', title: 'Success', message: 'Workspace imported successfully!', confirmText: 'Great' }); store.closeSettings() }
-      else store.requestDialog({ type: 'confirm', title: 'Error', message: 'Invalid JSON structure.', confirmText: 'Close', isDanger: true })
-    } catch (err) { store.requestDialog({ type: 'confirm', title: 'Error', message: 'Failed to parse JSON file.', confirmText: 'Close', isDanger: true }) }
+      if (success) {
+        store.requestDialog({ type: 'confirm', title: 'Success', message: 'Workspace imported successfully!', confirmText: 'Great' });
+        store.closeSettings()
+      } else {
+         store.requestDialog({ type: 'confirm', title: 'Structure Error', message: 'JSON format is valid, but it does not match the Kanban workspace structure.', confirmText: 'Close', isDanger: true })
+      }
+    } catch (err) {
+      console.error(err)
+      store.requestDialog({ type: 'confirm', title: 'System Error', message: 'An internal error occurred while applying the data.', confirmText: 'Close', isDanger: true })
+    }
+
     event.target.value = ''
   }
   reader.readAsText(file)
