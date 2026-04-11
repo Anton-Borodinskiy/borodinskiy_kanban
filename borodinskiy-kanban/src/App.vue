@@ -4,7 +4,8 @@ import { useBoardStore } from './stores/boardStore'
 import Board from './components/Board.vue'
 import TaskModal from './components/TaskModal.vue'
 import GlobalDialog from './components/GlobalDialog.vue'
-import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon } from '@heroicons/vue/24/outline'
+import SettingsModal from './components/SettingsModal.vue' // ДОБАВЛЕНО
+import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon, Cog6ToothIcon } from '@heroicons/vue/24/outline' // ДОБАВЛЕНО
 
 const store = useBoardStore()
 const searchQuery = ref('')
@@ -76,6 +77,10 @@ onMounted(() => {
           <MoonIcon v-if="store.settings.theme === 'light'" class="w-5 h-5" />
           <SunIcon v-else class="w-5 h-5" />
         </button>
+        <button @click="store.openSettings" class="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-md transition-colors" title="Workspace Settings">
+          <Cog6ToothIcon class="w-5 h-5" />
+        </button>
+
         <button @click="store.openNewTaskModal" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1.5 px-4 rounded-md transition-colors shadow-sm">
           + New Task
         </button>
@@ -93,4 +98,5 @@ onMounted(() => {
 
   <TaskModal />
   <GlobalDialog />
+  <SettingsModal />
 </template>

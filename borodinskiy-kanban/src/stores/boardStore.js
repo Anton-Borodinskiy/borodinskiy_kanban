@@ -28,9 +28,8 @@ export const useBoardStore = defineStore('board', {
   state: () => ({
     settings: {}, assignees: [], boards: [], columns: [], tasks: [], isLoaded: false,
     isModalOpen: false, editingTask: null,
-
-    // --- Состояние Глобального Диалога ---
-    dialog: { isOpen: false, type: 'confirm', title: '', message: '', confirmText: 'OK', isDanger: false, resolve: null }
+    dialog: { isOpen: false, type: 'confirm', title: '', message: '', confirmText: 'OK', isDanger: false, resolve: null },
+    isSettingsOpen: false
   }),
 
   getters: {
@@ -42,8 +41,7 @@ export const useBoardStore = defineStore('board', {
   },
 
   actions: {
-    // --- UI Dialog System ---
-    // Умная функция, которая возвращает Promise (как нативный confirm)
+    // --- UI & Dialogs ---
     requestDialog(options) {
       return new Promise((resolve) => {
         this.dialog = {
@@ -58,8 +56,10 @@ export const useBoardStore = defineStore('board', {
       this.dialog.isOpen = false
       this.dialog.resolve = null
     },
+    openSettings() { this.isSettingsOpen = true },
+    closeSettings() { this.isSettingsOpen = false },
 
-    // --- Данные ---
+    // --- Data (Load, Save, Import) ---
     async loadData() {
       try {
         const data = await storage.get('kanban_data')
@@ -72,8 +72,22 @@ export const useBoardStore = defineStore('board', {
       const { settings, assignees, boards, columns, tasks } = this.$state
       await storage.set('kanban_data', { settings, assignees, boards, columns, tasks })
     },
+    async importWorkspace(jsonData) {
+      if (jsonData && Array.isArray(jsonData.boards) && Array.isArray(jsonData.columns) && Array.isArray(jsonData.tasks)) {
+        this.$patch({
+          settings: jsonData.settings || this.settings,
+          assignees: jsonData.assignees || [],
+          boards: jsonData.boards,
+          columns: jsonData.columns,
+          tasks: jsonData.tasks
+        })
+        await this.saveData()
+        return true
+      }
+      return false
+    },
 
-    // --- Доски, Колонки, Задачи ---
+    // --- Boards & Columns ---
     addBoard(title) {
       const newBoard = { id: generateId('board'), title, createdAt: new Date().toISOString() }
       this.boards.push(newBoard)
@@ -92,6 +106,8 @@ export const useBoardStore = defineStore('board', {
       this.columns = this.columns.filter(c => c.id !== id)
       this.tasks = this.tasks.filter(t => t.columnId !== id)
     },
+
+    // --- Tasks ---
     openNewTaskModal() {
       const firstCol = this.activeColumns[0]
       if (!firstCol) return
@@ -106,6 +122,8 @@ export const useBoardStore = defineStore('board', {
       this.closeModal()
     },
     deleteTask(taskId) { this.tasks = this.tasks.filter(t => t.id !== taskId); this.closeModal() },
+
+    // --- Assignees ---
     addAssignee() { const newUser = { id: generateId('user'), name: 'New Employee', initials: 'EE', color: '#6366f1', avatar: null }; this.assignees.push(newUser); return newUser },
     updateAssignee(id, updates) { const i = this.assignees.findIndex(a => a.id === id); if (i !== -1) this.assignees[i] = { ...this.assignees[i], ...updates } },
     deleteAssignee(id) { this.tasks.forEach(t => { if (t.assigneeId === id) t.assigneeId = null }); this.assignees = this.assignees.filter(a => a.id !== id) }
