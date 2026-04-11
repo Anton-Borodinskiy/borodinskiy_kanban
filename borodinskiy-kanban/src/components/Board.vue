@@ -1,10 +1,10 @@
 <script setup>
-import { computed, ref, reactive } from 'vue'
+import { computed, ref, reactive, watch } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { useBoardStore } from '../stores/boardStore'
-import { PlusIcon, ArchiveBoxIcon, ListBulletIcon, ChevronLeftIcon, ChevronRightIcon, ArrowDownOnSquareStackIcon, CalendarDaysIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/vue/24/outline'
+import { PlusIcon, ArchiveBoxIcon, ListBulletIcon, ChevronLeftIcon, ChevronRightIcon, ArrowDownOnSquareStackIcon, CalendarDaysIcon, ChevronDownIcon, ChevronUpIcon, TrashIcon } from '@heroicons/vue/24/outline'
 
 const props = defineProps({ searchQuery: String, searchScope: String })
 const store = useBoardStore()
@@ -18,7 +18,6 @@ DOMPurify.addHook('afterSanitizeAttributes', function(node) {
 const renderMarkdown = (text) => text ? DOMPurify.sanitize(marked.parse(text)) : ''
 const getAssignee = (id) => store.assignees.find(a => a.id === id)
 
-// ИСПРАВЛЕНИЕ: Темнее Hover (hover:bg-gray-100) и замена purple на violet
 const colorClasses = {
   default: 'bg-white hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 border-gray-200 dark:border-gray-700 hover:border-blue-400',
   red: 'bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-900/50 border-red-200 dark:border-red-800 hover:border-red-400',
@@ -55,6 +54,19 @@ const getTasks = (columnId) => {
   return columnTasksCache[columnId]
 }
 
+// Звуковое уведомление (синтезируется браузером)
+const playDing = () => {
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+    if (audioCtx.state === 'suspended') audioCtx.resume()
+    const osc = audioCtx.createOscillator(); const gainNode = audioCtx.createGain()
+    osc.type = 'sine'; osc.frequency.setValueAtTime(800, audioCtx.currentTime); osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1)
+    gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3)
+    osc.connect(gainNode); gainNode.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + 0.3)
+  } catch(e) {}
+}
+const handleAdd = (evt, col) => { if(col.isArchive) playDing() }
+
 const toggleArchiveTask = async (task) => { const confirmed = await store.requestDialog({ type: 'confirm', title: 'Archive Task', message: 'Move this task to the Global Archive?', confirmText: 'Archive' }); if (confirmed) store.archiveTask(task.id) }
 const addNewColumn = async () => { const result = await store.requestDialog({ type: 'addColumn', title: 'Add New Column', confirmText: 'Add' }); if (result) store.addColumn(store.settings.activeBoardId, result.title, result.isArchive) }
 const removeColumn = async (id) => { const confirmed = await store.requestDialog({ type: 'confirm', title: 'Delete Column', message: 'Delete column and ALL tasks? This cannot be undone.', confirmText: 'Delete', isDanger: true }); if (confirmed) store.deleteColumn(id) }
@@ -66,6 +78,12 @@ const isSearchMatch = (task) => {
   const q = props.searchQuery.toLowerCase().trim();
   return task.title?.toLowerCase().includes(q) || task.description?.toLowerCase().includes(q) || task.closingComment?.toLowerCase().includes(q);
 }
+
+// Логика Drop-зон
+const dropzoneDeleteTasks = ref([])
+const dropzoneArchiveTasks = ref([])
+watch(dropzoneDeleteTasks, (newVal) => { if(newVal.length > 0) { store.deleteTask(newVal[0].id); dropzoneDeleteTasks.value = [] } })
+watch(dropzoneArchiveTasks, (newVal) => { if(newVal.length > 0) { store.archiveTask(newVal[0].id); dropzoneArchiveTasks.value = [] } })
 </script>
 
 <template>
@@ -82,7 +100,7 @@ const isSearchMatch = (task) => {
       <button v-if="!store.isColumnsLocked" @click="store.moveColumn(column.id, -1)" class="absolute -left-6 top-[5%] bottom-[5%] w-6 flex items-center justify-center opacity-0 group-hover/col-wrapper:opacity-100 hover:bg-blue-500/10 dark:hover:bg-blue-400/10 text-gray-400 hover:text-blue-600 rounded-l-xl transition-all z-10 disabled:hidden" :disabled="index === 0"><ChevronLeftIcon class="w-5 h-5" /></button>
       <button v-if="!store.isColumnsLocked" @click="store.moveColumn(column.id, 1)" class="absolute -right-6 top-[5%] bottom-[5%] w-6 flex items-center justify-center opacity-0 group-hover/col-wrapper:opacity-100 hover:bg-blue-500/10 dark:hover:bg-blue-400/10 text-gray-400 hover:text-blue-600 rounded-r-xl transition-all z-10 disabled:hidden" :disabled="index === store.activeColumns.length - 1"><ChevronRightIcon class="w-5 h-5" /></button>
 
-      <div :class="['flex-1 flex flex-col bg-gray-200 dark:bg-gray-800 rounded-2xl max-h-full shadow-sm border-2 transition-colors', (column.wipLimit > 0 && getTasks(column.id).value.length > column.wipLimit) ? 'border-red-400' : 'border-transparent']">
+      <div :class="['flex-1 flex flex-col bg-gray-200/95 dark:bg-gray-800/95 backdrop-blur-sm rounded-2xl max-h-full shadow-sm border-2 transition-colors', (column.wipLimit > 0 && getTasks(column.id).value.length > column.wipLimit) ? 'border-red-400' : 'border-transparent']">
 
         <div class="p-4 flex justify-between items-center group">
           <div class="flex items-center gap-2 overflow-hidden flex-1">
@@ -100,10 +118,10 @@ const isSearchMatch = (task) => {
           </div>
         </div>
 
-        <VueDraggable v-model="getTasks(column.id).value" group="tasks" class="flex-1 overflow-y-auto p-3 space-y-3 min-h-[100px]" ghostClass="opacity-40" :animation="150">
-          <div v-for="task in getTasks(column.id).value" :key="task.id" :id="`task-${task.id}`" @click="store.openEditTaskModal(task)" :class="['p-4 rounded-xl shadow-sm cursor-pointer border-2 transition-all relative group/card', colorClasses[task.color || 'default'], store.highlightedTaskId === task.id ? '!border-yellow-400 ring-4 ring-yellow-400/30 scale-[1.02] z-10' : '', isSearchMatch(task) ? '!border-blue-400 ring-4 ring-blue-400/30' : '']" :style="task.color && task.color.startsWith('#') ? { backgroundColor: task.color, borderColor: 'rgba(0,0,0,0.1)' } : {}">
+        <VueDraggable v-model="getTasks(column.id).value" group="tasks" @start="store.isDraggingTask = true" @end="store.isDraggingTask = false" @add="(e) => handleAdd(e, column)" class="flex-1 overflow-y-auto p-3 space-y-3 min-h-[100px]" ghostClass="opacity-40" :animation="150">
+          <div v-for="task in getTasks(column.id).value" :key="task.id" :id="`task-${task.id}`" @click="store.openEditTaskModal(task)" :class="['rounded-xl shadow-sm cursor-pointer border-2 transition-all relative group/card', store.settings.isCompactMode ? 'p-3' : 'p-4', task.color && task.color.startsWith('#') ? 'bg-white dark:bg-gray-700 border-transparent hover:border-blue-400' : colorClasses[task.color || 'default'], store.highlightedTaskId === task.id ? '!border-yellow-400 ring-4 ring-yellow-400/30 scale-[1.02] z-10' : '', isSearchMatch(task) ? '!border-blue-400 ring-4 ring-blue-400/30' : '']" :style="task.color && task.color.startsWith('#') ? { backgroundColor: task.color, borderColor: 'rgba(0,0,0,0.1)' } : {}">
 
-            <button @click.stop="toggleArchiveTask(task)" class="absolute top-2 right-2 opacity-0 group-hover/card:opacity-100 p-1 text-gray-400 hover:text-indigo-500 transition-opacity"><ArchiveBoxIcon class="w-3.5 h-3.5" /></button>
+            <button v-if="column.isArchive" @click.stop="toggleArchiveTask(task)" class="absolute top-2 right-2 opacity-0 group-hover/card:opacity-100 p-1 text-gray-400 hover:text-indigo-500 transition-opacity"><ArchiveBoxIcon class="w-3.5 h-3.5" /></button>
 
             <div class="flex justify-between items-start pr-4">
               <h4 :class="['font-semibold text-gray-900 dark:text-white leading-snug', store.settings.isCompactMode ? 'text-xs' : 'text-sm mb-2']">{{ task.title }}</h4>
@@ -143,5 +161,16 @@ const isSearchMatch = (task) => {
     </div>
 
     <button @click="addNewColumn" class="flex-shrink-0 w-80 bg-gray-200/90 dark:bg-gray-800/90 backdrop-blur text-gray-500 font-bold py-4 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 transition-all">+ Add Column</button>
+
+    <div v-show="store.isDraggingTask" class="fixed bottom-0 left-0 w-full p-4 flex gap-4 justify-center pointer-events-none z-50">
+      <VueDraggable v-model="dropzoneDeleteTasks" group="tasks" class="w-64 h-24 bg-red-500/90 backdrop-blur text-white rounded-2xl flex flex-col items-center justify-center border-2 border-red-600 shadow-2xl pointer-events-auto transform transition-transform hover:scale-105">
+        <TrashIcon class="w-8 h-8 mb-1" />
+        <span class="font-bold">Drop to Delete</span>
+      </VueDraggable>
+      <VueDraggable v-model="dropzoneArchiveTasks" group="tasks" class="w-64 h-24 bg-indigo-500/90 backdrop-blur text-white rounded-2xl flex flex-col items-center justify-center border-2 border-indigo-600 shadow-2xl pointer-events-auto transform transition-transform hover:scale-105">
+        <ArchiveBoxIcon class="w-8 h-8 mb-1" />
+        <span class="font-bold">Drop to Archive</span>
+      </VueDraggable>
+    </div>
   </div>
 </template>
