@@ -29,9 +29,7 @@ export const useBoardStore = defineStore('board', {
     settings: {}, assignees: [], boards: [], columns: [], tasks: [], isLoaded: false,
     isModalOpen: false, editingTask: null,
     dialog: { isOpen: false, type: 'confirm', title: '', message: '', confirmText: 'OK', isDanger: false, resolve: null },
-    isSettingsOpen: false,
-    highlightedTaskId: null,
-    assigneeFilterId: null // НОВОЕ: Фильтр по сотруднику
+    isSettingsOpen: false, highlightedTaskId: null, assigneeFilterId: null
   }),
 
   getters: {
@@ -49,19 +47,43 @@ export const useBoardStore = defineStore('board', {
       })
     },
     closeDialog(result = null) {
-      if (this.dialog.resolve) this.dialog.resolve(result)
+      if (this.dialog.resolve) this.dialog.resolve(result);
       this.dialog.isOpen = false; this.dialog.resolve = null
     },
     openSettings() { this.isSettingsOpen = true },
     closeSettings() { this.isSettingsOpen = false },
 
+    // --- ИСПРАВЛЕНИЕ ТЕМЫ: Мгновенное применение ---
+    applyTheme() {
+      const isDark = this.settings.theme === 'dark' || (this.settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+      if (isDark) document.documentElement.classList.add('dark')
+      else document.documentElement.classList.remove('dark')
+    },
+    toggleTheme() {
+      const isCurrentlyDark = document.documentElement.classList.contains('dark')
+      this.settings.theme = isCurrentlyDark ? 'light' : 'dark'
+      this.applyTheme()
+      this.saveData()
+    },
+
     async loadData() {
       try {
         const data = await storage.get('kanban_data')
         if (data && Array.isArray(data.columns) && Array.isArray(data.tasks)) {
+          // МИГРАЦИЯ: Переносим старый assigneeId (один) в assigneeIds (массив)
+          data.tasks.forEach(t => {
+            if (t.assigneeId !== undefined) {
+              t.assigneeIds = t.assigneeId ? [t.assigneeId] : []
+              delete t.assigneeId
+            }
+          })
           this.$patch({ settings: data.settings, assignees: data.assignees || [], boards: data.boards, columns: data.columns, tasks: data.tasks })
         } else this.$patch(defaultState)
-      } catch (e) { this.$patch(defaultState) } finally { this.isLoaded = true }
+      } catch (e) { this.$patch(defaultState) }
+      finally {
+        this.applyTheme() // Применяем тему до отображения UI
+        this.isLoaded = true
+      }
     },
     async saveData() {
       const { settings, assignees, boards, columns, tasks } = this.$state
@@ -70,7 +92,7 @@ export const useBoardStore = defineStore('board', {
     async importWorkspace(jsonData) {
       if (jsonData && Array.isArray(jsonData.boards)) {
         this.$patch({ settings: jsonData.settings || this.settings, assignees: jsonData.assignees || [], boards: jsonData.boards, columns: jsonData.columns, tasks: jsonData.tasks })
-        await this.saveData(); return true
+        await this.saveData(); this.applyTheme(); return true
       }
       return false
     },
@@ -82,7 +104,11 @@ export const useBoardStore = defineStore('board', {
       this.addColumn(newBoard.id, 'To Do', false)
       this.addColumn(newBoard.id, 'Done (Archive)', true)
     },
-    // НОВОЕ: Дублирование доски
+    // НОВОЕ: Переименование доски
+    renameBoard(id, newTitle) {
+      const board = this.boards.find(b => b.id === id)
+      if (board) board.title = newTitle
+    },
     duplicateBoard() {
       const board = this.activeBoard
       if(!board) return
@@ -110,10 +136,14 @@ export const useBoardStore = defineStore('board', {
     openNewTaskModal(columnId = null) {
       const targetColId = columnId || (this.activeColumns[0]?.id)
       if (!targetColId) return
-      this.editingTask = { id: generateId('task'), columnId: targetColId, assigneeId: null, title: '', description: '', order: this.tasks.filter(t => t.columnId === targetColId).length, createdAt: new Date().toISOString(), closedAt: null, closingComment: null, isNew: true }
+      this.editingTask = { id: generateId('task'), columnId: targetColId, assigneeIds: [], title: '', description: '', order: this.tasks.filter(t => t.columnId === targetColId).length, createdAt: new Date().toISOString(), closedAt: null, closingComment: null, isNew: true }
       this.isModalOpen = true
     },
-    openEditTaskModal(task) { this.editingTask = JSON.parse(JSON.stringify(task)); this.isModalOpen = true },
+    openEditTaskModal(task) {
+      this.editingTask = JSON.parse(JSON.stringify(task));
+      if(!this.editingTask.assigneeIds) this.editingTask.assigneeIds = []; // Безопасность
+      this.isModalOpen = true
+    },
     closeModal() { this.isModalOpen = false; this.editingTask = null },
     saveTask(taskData) {
       if (taskData.isNew) { delete taskData.isNew; this.tasks.push(taskData) }
@@ -135,6 +165,9 @@ export const useBoardStore = defineStore('board', {
 
     addAssignee() { const newUser = { id: generateId('user'), name: 'New Employee', initials: 'EE', color: '#6366f1', avatar: null }; this.assignees.push(newUser); return newUser },
     updateAssignee(id, updates) { const i = this.assignees.findIndex(a => a.id === id); if (i !== -1) this.assignees[i] = { ...this.assignees[i], ...updates } },
-    deleteAssignee(id) { this.tasks.forEach(t => { if (t.assigneeId === id) t.assigneeId = null }); this.assignees = this.assignees.filter(a => a.id !== id) }
+    deleteAssignee(id) {
+      this.tasks.forEach(t => { if (t.assigneeIds) t.assigneeIds = t.assigneeIds.filter(aId => aId !== id) });
+      this.assignees = this.assignees.filter(a => a.id !== id)
+    }
   }
 })

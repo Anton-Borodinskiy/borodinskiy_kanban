@@ -1,11 +1,11 @@
 <script setup>
-import { onMounted, ref, watch, computed } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { useBoardStore } from './stores/boardStore'
 import Board from './components/Board.vue'
 import TaskModal from './components/TaskModal.vue'
 import GlobalDialog from './components/GlobalDialog.vue'
 import SettingsModal from './components/SettingsModal.vue'
-import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon, Cog6ToothIcon, ViewColumnsIcon, DocumentDuplicateIcon } from '@heroicons/vue/24/outline'
+import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon, Cog6ToothIcon, ViewColumnsIcon, DocumentDuplicateIcon, PencilIcon } from '@heroicons/vue/24/outline'
 
 const store = useBoardStore()
 const searchQuery = ref('')
@@ -31,30 +31,19 @@ const navigateToTask = (task) => {
   }
 }
 
-// ИСПРАВЛЕНИЕ: Гарантированная смена темы и сохранение
-const toggleTheme = () => {
-  const isCurrentlyDark = document.documentElement.classList.contains('dark')
-  store.settings.theme = isCurrentlyDark ? 'light' : 'dark'
-  applyTheme()
-  store.saveData() // Сохраняем немедленно!
-}
-
-const applyTheme = () => {
-  const isDark = store.settings.theme === 'dark' || (store.settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  if (isDark) document.documentElement.classList.add('dark')
-  else document.documentElement.classList.remove('dark')
-}
-
 const createNewBoard = async () => {
   const title = await store.requestDialog({ type: 'prompt', title: 'Create New Board', message: 'Enter a title for your new workspace:', confirmText: 'Create' })
   if (title) store.addBoard(title)
 }
-const duplicateBoard = () => store.duplicateBoard()
+
+const renameActiveBoard = async () => {
+  const title = await store.requestDialog({ type: 'prompt', title: 'Rename Board', message: 'Enter new title:', confirmText: 'Rename' })
+  if (title) store.renameBoard(store.settings.activeBoardId, title)
+}
 
 onMounted(() => {
   store.loadData()
   store.$subscribe(() => store.saveData())
-  setTimeout(applyTheme, 50)
 })
 </script>
 
@@ -76,26 +65,21 @@ onMounted(() => {
           <select v-model="store.settings.activeBoardId" class="bg-transparent border-none text-sm py-1.5 pl-3 pr-8 focus:outline-none focus:ring-0 outline-none cursor-pointer text-gray-900 dark:text-white">
             <option v-for="board in store.boards" :key="board.id" :value="board.id" class="dark:bg-gray-800">{{ board.title }}</option>
           </select>
+          <button @click="renameActiveBoard" class="p-1 text-gray-500 hover:text-orange-600 dark:text-gray-400 dark:hover:text-orange-400 rounded outline-none" title="Rename Board"><PencilIcon class="w-4 h-4" /></button>
           <button @click="createNewBoard" class="p-1 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 rounded outline-none" title="Create New Board"><PlusIcon class="w-4 h-4" /></button>
-          <button @click="duplicateBoard" class="p-1 text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 rounded outline-none" title="Duplicate Board"><DocumentDuplicateIcon class="w-4 h-4" /></button>
+          <button @click="store.duplicateBoard" class="p-1 text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 rounded outline-none" title="Duplicate Board"><DocumentDuplicateIcon class="w-4 h-4" /></button>
         </div>
       </div>
 
       <div class="flex items-center gap-3">
-
         <div class="hidden md:flex items-center gap-1 mr-2 border-r border-gray-200 dark:border-gray-700 pr-3">
-          <button
-            v-for="user in store.assignees" :key="user.id"
-            @click="store.assigneeFilterId = store.assigneeFilterId === user.id ? null : user.id"
-            :class="['w-7 h-7 rounded-full overflow-hidden border-2 transition-all', store.assigneeFilterId === user.id ? 'border-blue-500 scale-110 shadow-md' : 'border-transparent opacity-70 hover:opacity-100']"
-            :title="`Filter by ${user.name}`"
-          >
+          <button v-for="user in store.assignees" :key="user.id" @click="store.assigneeFilterId = store.assigneeFilterId === user.id ? null : user.id" :class="['w-7 h-7 rounded-full overflow-hidden border-2 transition-all', store.assigneeFilterId === user.id ? 'border-blue-500 scale-110 shadow-md' : 'border-transparent opacity-70 hover:opacity-100']" :title="`Filter by ${user.name}`">
             <img v-if="user.avatar" :src="user.avatar" class="w-full h-full object-cover" />
             <div v-else class="w-full h-full flex items-center justify-center text-[9px] font-bold text-white" :style="{ backgroundColor: user.color }">{{ user.initials }}</div>
           </button>
         </div>
 
-        <div class="relative flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg focus-within:ring-2 focus-within:ring-blue-500 transition-shadow">
+        <div class="relative flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 transition-shadow">
           <div class="pl-3 text-gray-400"><MagnifyingGlassIcon class="w-4 h-4" /></div>
           <input v-model="searchQuery" type="text" placeholder="Search tasks..." class="bg-transparent border-none text-sm py-1.5 px-3 w-48 lg:w-64 focus:outline-none focus:ring-0 outline-none text-gray-900 dark:text-white">
           <select v-model="searchScope" class="bg-gray-200 dark:bg-gray-600 border-none text-xs py-1.5 pl-2 pr-6 focus:outline-none focus:ring-0 outline-none cursor-pointer border-l border-gray-300 dark:border-gray-500 text-gray-700 dark:text-white">
@@ -111,7 +95,7 @@ onMounted(() => {
           </div>
         </div>
 
-        <button @click="toggleTheme" class="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-md transition-colors"><MoonIcon v-if="store.settings.theme === 'light'" class="w-5 h-5" /><SunIcon v-else class="w-5 h-5" /></button>
+        <button @click="store.toggleTheme" class="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-md transition-colors"><MoonIcon v-if="store.settings.theme === 'light'" class="w-5 h-5" /><SunIcon v-else class="w-5 h-5" /></button>
         <button @click="store.openSettings" class="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-md transition-colors"><Cog6ToothIcon class="w-5 h-5" /></button>
         <button @click="store.openNewTaskModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1.5 px-4 rounded-md shadow-sm transition-colors">+ New Task</button>
       </div>
@@ -125,4 +109,6 @@ onMounted(() => {
     <GlobalDialog />
     <SettingsModal />
   </div>
+
+  <div v-else class="h-screen bg-gray-50 dark:bg-gray-900"></div>
 </template>
