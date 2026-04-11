@@ -108,11 +108,46 @@ export const useBoardStore = defineStore('board', {
     },
 
     // --- Tasks ---
-    openNewTaskModal() {
-      const firstCol = this.activeColumns[0]
-      if (!firstCol) return
-      this.editingTask = { id: generateId('task'), columnId: firstCol.id, assigneeId: null, title: '', description: '', order: this.tasks.filter(t => t.columnId === firstCol.id).length, createdAt: new Date().toISOString(), closedAt: null, closingComment: null, isNew: true }
+    // В actions внутри src/stores/boardStore.js обнови/добавь эти методы:
+
+    openNewTaskModal(columnId = null) {
+      // Если columnId не передан, берем первую колонку активной доски
+      const targetColumnId = columnId || (this.activeColumns[0]?.id)
+      if (!targetColumnId) return
+
+      this.editingTask = {
+        id: generateId('task'),
+        columnId: targetColumnId,
+        assigneeId: null,
+        title: '',
+        description: '',
+        order: this.tasks.filter(t => t.columnId === targetColumnId).length,
+        createdAt: new Date().toISOString(),
+        closedAt: null,
+        closingComment: null,
+        isNew: true
+      }
       this.isModalOpen = true
+    },
+
+    // Геттер для поиска (можно вынести в геттеры, но как экшн удобнее для фильтрации по всем доскам)
+    searchTasks(query, scope = 'current') {
+      const q = query.toLowerCase().trim()
+      if (!q) return []
+
+      let tasksToSearch = []
+      if (scope === 'current') {
+        const colIds = this.activeColumns.map(c => c.id)
+        tasksToSearch = this.tasks.filter(t => colIds.includes(t.columnId))
+      } else {
+        tasksToSearch = this.tasks
+      }
+
+      return tasksToSearch.filter(t =>
+        t.title.toLowerCase().includes(q) ||
+        (t.description && t.description.toLowerCase().includes(q)) ||
+        (t.closingComment && t.closingComment.toLowerCase().includes(q))
+      )
     },
     openEditTaskModal(task) { this.editingTask = JSON.parse(JSON.stringify(task)); this.isModalOpen = true },
     closeModal() { this.isModalOpen = false; this.editingTask = null },
