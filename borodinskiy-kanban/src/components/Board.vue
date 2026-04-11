@@ -4,7 +4,7 @@ import { VueDraggable } from 'vue-draggable-plus'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { useBoardStore } from '../stores/boardStore'
-import { PlusIcon, ArchiveBoxIcon, ViewColumnsIcon, ListBulletIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/outline'
+import { PlusIcon, ArchiveBoxIcon, ViewColumnsIcon, ListBulletIcon, ChevronLeftIcon, ChevronRightIcon, ArrowDownOnSquareStackIcon } from '@heroicons/vue/24/outline'
 
 const props = defineProps({ searchQuery: String, searchScope: String })
 const store = useBoardStore()
@@ -14,7 +14,6 @@ const editingColId = ref(null)
 DOMPurify.addHook('afterSanitizeAttributes', function(node) {
   if (node.tagName === 'A') { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
 });
-
 const renderMarkdown = (text) => text ? DOMPurify.sanitize(marked.parse(text)) : ''
 const getAssignee = (id) => store.assignees.find(a => a.id === id)
 
@@ -22,8 +21,11 @@ const getTasks = (columnId) => {
   if (!columnTasksCache[columnId]) {
     columnTasksCache[columnId] = computed({
       get: () => {
-        let tasks = store.tasks.filter(t => t.columnId === columnId).sort((a, b) => a.order - b.order)
-        if (store.assigneeFilterId) tasks = tasks.filter(t => t.assigneeIds && t.assigneeIds.includes(store.assigneeFilterId))
+        // ИСПРАВЛЕНИЕ: Фильтруем заархивированные задачи
+        let tasks = store.tasks.filter(t => t.columnId === columnId && !t.isArchived).sort((a, b) => a.order - b.order)
+        if (store.assigneeFilterIds.length > 0) {
+          tasks = tasks.filter(t => t.assigneeIds && t.assigneeIds.some(id => store.assigneeFilterIds.includes(id)))
+        }
         if (props.searchScope === 'current' && props.searchQuery.trim().length > 1) {
           const q = props.searchQuery.toLowerCase().trim()
           tasks = tasks.filter(t => t.title.toLowerCase().includes(q) || (t.description && t.description.toLowerCase().includes(q)) || (t.closingComment && t.closingComment.toLowerCase().includes(q)))
@@ -38,16 +40,15 @@ const getTasks = (columnId) => {
 
 const addNewColumn = async () => { const result = await store.requestDialog({ type: 'addColumn', title: 'Add New Column', confirmText: 'Add' }); if (result) store.addColumn(store.settings.activeBoardId, result.title, result.isArchive) }
 const removeColumn = async (id) => { const confirmed = await store.requestDialog({ type: 'confirm', title: 'Delete Column', message: 'Delete column and ALL tasks? This cannot be undone.', confirmText: 'Delete', isDanger: true }); if (confirmed) store.deleteColumn(id) }
+const setWipLimit = async (col) => { const result = await store.requestDialog({ type: 'prompt', title: 'Set WIP Limit', message: 'Enter max number of tasks (0 for no limit):', confirmText: 'Set Limit' }); if (result !== null) store.setColumnWip(col.id, result) }
+const isSearchMatch = (task) => { if (!props.searchQuery || props.searchQuery.length < 2 || props.searchScope !== 'current') return false; const q = props.searchQuery.toLowerCase(); return task.title.toLowerCase().includes(q) || (task.description && task.description.toLowerCase().includes(q)); }
 
-const setWipLimit = async (col) => {
-  const result = await store.requestDialog({ type: 'prompt', title: 'Set WIP Limit', message: 'Enter max number of tasks (0 for no limit):', confirmText: 'Set Limit' })
-  if (result !== null) store.setColumnWip(col.id, result)
-}
-
-const isSearchMatch = (task) => {
-  if (!props.searchQuery || props.searchQuery.length < 2 || props.searchScope !== 'current') return false;
-  const q = props.searchQuery.toLowerCase();
-  return task.title.toLowerCase().includes(q) || (task.description && task.description.toLowerCase().includes(q));
+// НОВОЕ: Очистка архивной колонки
+const clearArchiveColumn = async (columnId) => {
+  const count = getTasks(columnId).value.length
+  if (count === 0) return
+  const confirmed = await store.requestDialog({ type: 'confirm', title: 'Clear Column', message: `Move ${count} tasks to the Global Archive? They will be removed from this board.`, confirmText: 'Archive' })
+  if (confirmed) store.archiveAllInColumn(columnId)
 }
 </script>
 
@@ -65,9 +66,7 @@ const isSearchMatch = (task) => {
 
     <div v-for="(column, index) in store.activeColumns" :key="column.id" :class="['flex-shrink-0 flex group/col-wrapper transition-all duration-300', column.width]">
 
-      <button @click="store.moveColumn(column.id, -1)" class="w-4 flex flex-col justify-center items-center opacity-0 group-hover/col-wrapper:opacity-100 hover:bg-blue-500 hover:text-white rounded-l-xl bg-gray-200/50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 transition-all disabled:opacity-0" :disabled="index === 0">
-        <ChevronLeftIcon class="w-3 h-3" />
-      </button>
+      <button @click="store.moveColumn(column.id, -1)" class="w-4 flex flex-col justify-center items-center opacity-0 group-hover/col-wrapper:opacity-100 hover:bg-blue-500 hover:text-white rounded-l-xl bg-gray-200/50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 transition-all disabled:opacity-0" :disabled="index === 0"><ChevronLeftIcon class="w-3 h-3" /></button>
 
       <div :class="['flex-1 flex flex-col bg-gray-200 dark:bg-gray-800 max-h-full shadow-sm border-2', index === 0 ? 'rounded-r-xl' : index === store.activeColumns.length - 1 ? 'rounded-l-xl' : '', (column.wipLimit > 0 && getTasks(column.id).value.length > column.wipLimit) ? 'border-red-400 dark:border-red-600' : 'border-transparent']">
 
@@ -81,6 +80,8 @@ const isSearchMatch = (task) => {
           </div>
 
           <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 shrink-0">
+             <button v-if="column.isArchive" @click="clearArchiveColumn(column.id)" class="w-5 h-5 bg-indigo-100 hover:bg-indigo-500 dark:bg-indigo-900/50 hover:text-white text-indigo-600 dark:text-indigo-400 rounded text-[10px] flex items-center justify-center font-bold transition-colors" title="Move All Tasks to Global Archive"><ArrowDownOnSquareStackIcon class="w-3 h-3"/></button>
+
              <button @click="setWipLimit(column)" class="w-5 h-5 bg-gray-300 hover:bg-orange-500 dark:bg-gray-600 hover:text-white rounded text-[10px] flex items-center justify-center font-bold transition-colors" title="Set WIP Limit">W</button>
              <button @click="store.toggleColumnArchive(column.id)" :class="['w-5 h-5 rounded flex items-center justify-center transition-colors', column.isArchive ? 'bg-green-500 hover:bg-green-600 text-white shadow-inner' : 'bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 text-gray-600']" title="Toggle Archive Mode"><ArchiveBoxIcon class="w-3 h-3" /></button>
              <div class="w-px h-3 bg-gray-400 mx-0.5"></div>
@@ -122,9 +123,7 @@ const isSearchMatch = (task) => {
         <button @click="store.openNewTaskModal(column.id)" class="m-3 p-2 flex items-center justify-center gap-2 text-xs font-medium text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-white/50 dark:hover:bg-white/5 rounded-lg transition-all"><PlusIcon class="w-4 h-4" /> Add Task</button>
       </div>
 
-      <button @click="store.moveColumn(column.id, 1)" class="w-4 flex flex-col justify-center items-center opacity-0 group-hover/col-wrapper:opacity-100 hover:bg-blue-500 hover:text-white rounded-r-xl bg-gray-200/50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 transition-all disabled:opacity-0" :disabled="index === store.activeColumns.length - 1">
-        <ChevronRightIcon class="w-3 h-3" />
-      </button>
+      <button @click="store.moveColumn(column.id, 1)" class="w-4 flex flex-col justify-center items-center opacity-0 group-hover/col-wrapper:opacity-100 hover:bg-blue-500 hover:text-white rounded-r-xl bg-gray-200/50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 transition-all disabled:opacity-0" :disabled="index === store.activeColumns.length - 1"><ChevronRightIcon class="w-3 h-3" /></button>
 
     </div>
 

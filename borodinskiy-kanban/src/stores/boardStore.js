@@ -13,7 +13,6 @@ const storage = {
   }
 }
 
-// ИСПРАВЛЕНИЕ: Базовый размер теперь w-80
 const defaultState = {
   settings: { theme: 'system', activeBoardId: 'board-1' },
   assignees: [{ id: 'user-1', name: 'Alexander Borodin', initials: 'AB', color: '#3B82F6', avatar: null }],
@@ -33,7 +32,11 @@ export const useBoardStore = defineStore('board', {
     settings: {}, assignees: [], boards: [], columns: [], tasks: [], isLoaded: false,
     isModalOpen: false, editingTask: null,
     dialog: { isOpen: false, type: 'confirm', title: '', message: '', confirmText: 'OK', isDanger: false, resolve: null },
-    isSettingsOpen: false, highlightedTaskId: null, assigneeFilterId: null
+    isSettingsOpen: false, highlightedTaskId: null,
+
+    // НОВОЕ
+    currentView: 'board', // 'board' или 'archive'
+    assigneeFilterIds: [] // Массив для фильтрации нескольких сотрудников
   }),
 
   getters: {
@@ -41,6 +44,12 @@ export const useBoardStore = defineStore('board', {
     activeColumns: (state) => {
       if (!state.settings.activeBoardId) return []
       return state.columns.filter(c => c.boardId === state.settings.activeBoardId).sort((a, b) => a.order - b.order)
+    },
+    // Получить все архивированные задачи текущей доски
+    archivedTasks: (state) => {
+      if (!state.settings.activeBoardId) return []
+      const boardColIds = state.columns.filter(c => c.boardId === state.settings.activeBoardId).map(c => c.id)
+      return state.tasks.filter(t => t.isArchived && boardColIds.includes(t.columnId))
     }
   },
 
@@ -67,8 +76,12 @@ export const useBoardStore = defineStore('board', {
             if (t.assigneeId !== undefined) { t.assigneeIds = t.assigneeId ? [t.assigneeId] : []; delete t.assigneeId }
             if (!t.subtasks) t.subtasks = []
             if (!t.tags) t.tags = []
+            if (t.isArchived === undefined) t.isArchived = false // Миграция
           })
           data.columns.forEach(c => { if (c.wipLimit === undefined) c.wipLimit = 0 })
+          // Избегаем проблем с размером w-64 из старых сохранений
+          data.columns.forEach(c => { if (c.width === 'w-64') c.width = 'w-72' })
+
           this.$patch({ settings: data.settings, assignees: data.assignees || [], boards: data.boards, columns: data.columns, tasks: data.tasks })
         } else this.$patch(defaultState)
       } catch (e) { this.$patch(defaultState) }
@@ -87,7 +100,7 @@ export const useBoardStore = defineStore('board', {
     addBoard(title) {
       const newBoard = { id: generateId('board'), title, createdAt: new Date().toISOString() }
       this.boards.push(newBoard); this.settings.activeBoardId = newBoard.id
-      this.addColumn(newBoard.id, 'To Do', false); this.addColumn(newBoard.id, 'Done (Archive)', true)
+      this.addColumn(newBoard.id, 'To Do', false); this.addColumn(newBoard.id, 'Done', true)
     },
     renameBoard(id, newTitle) { const board = this.boards.find(b => b.id === id); if (board) board.title = newTitle },
     duplicateBoard() {
@@ -111,30 +124,38 @@ export const useBoardStore = defineStore('board', {
       }
     },
 
-    // ИСПРАВЛЕНИЕ: Базовый размер w-80
     addColumn(boardId, title, isArchive = false) { this.columns.push({ id: generateId('col'), boardId, title, order: this.columns.filter(c => c.boardId === boardId).length, width: 'w-80', isArchive, wipLimit: 0 }) },
     updateColumn(id, updates) { const index = this.columns.findIndex(c => c.id === id); if (index !== -1) this.columns[index] = { ...this.columns[index], ...updates } },
     deleteColumn(id) { this.columns = this.columns.filter(c => c.id !== id); this.tasks = this.tasks.filter(t => t.columnId !== id) },
     toggleColumnArchive(columnId) { const col = this.columns.find(c => c.id === columnId); if (col) col.isArchive = !col.isArchive },
     setColumnWip(columnId, limit) { const col = this.columns.find(c => c.id === columnId); if (col) col.wipLimit = parseInt(limit) || 0 },
-
-    // НОВОЕ: Перемещение колонок
     moveColumn(columnId, direction) {
       const columns = this.activeColumns
       const idx = columns.findIndex(c => c.id === columnId)
       if (idx === -1) return
       const newIdx = idx + direction
       if (newIdx >= 0 && newIdx < columns.length) {
-        const tempOrder = columns[idx].order
-        columns[idx].order = columns[newIdx].order
-        columns[newIdx].order = tempOrder
+        const tempOrder = columns[idx].order; columns[idx].order = columns[newIdx].order; columns[newIdx].order = tempOrder
       }
+    },
+
+    // НОВОЕ: Логика Глобального Архива
+    archiveTask(taskId) {
+      const task = this.tasks.find(t => t.id === taskId)
+      if (task) task.isArchived = true
+    },
+    unarchiveTask(taskId) {
+      const task = this.tasks.find(t => t.id === taskId)
+      if (task) task.isArchived = false
+    },
+    archiveAllInColumn(columnId) {
+      this.tasks.filter(t => t.columnId === columnId && !t.isArchived).forEach(t => t.isArchived = true)
     },
 
     openNewTaskModal(columnId = null) {
       const targetColId = columnId || (this.activeColumns[0]?.id)
       if (!targetColId) return
-      this.editingTask = { id: generateId('task'), columnId: targetColId, assigneeIds: [], tags: [], subtasks: [], title: '', description: '', order: this.tasks.filter(t => t.columnId === targetColId).length, createdAt: new Date().toISOString(), closedAt: null, closingComment: null, isNew: true }
+      this.editingTask = { id: generateId('task'), columnId: targetColId, assigneeIds: [], tags: [], subtasks: [], title: '', description: '', order: this.tasks.filter(t => t.columnId === targetColId).length, createdAt: new Date().toISOString(), closedAt: null, closingComment: null, isNew: true, isArchived: false }
       this.isModalOpen = true
     },
     openEditTaskModal(task) {
@@ -155,7 +176,7 @@ export const useBoardStore = defineStore('board', {
     searchTasks(query, scope = 'current') {
       const q = query.toLowerCase().trim()
       if (!q) return []
-      let tasksToSearch = scope === 'current' ? this.tasks.filter(t => this.activeColumns.map(c=>c.id).includes(t.columnId)) : this.tasks
+      let tasksToSearch = scope === 'current' ? this.tasks.filter(t => this.activeColumns.map(c=>c.id).includes(t.columnId) && !t.isArchived) : this.tasks.filter(t => !t.isArchived)
       return tasksToSearch.filter(t => t.title.toLowerCase().includes(q) || (t.description && t.description.toLowerCase().includes(q)) || (t.closingComment && t.closingComment.toLowerCase().includes(q)))
     },
     setHighlight(taskId) { this.highlightedTaskId = taskId; setTimeout(() => { if (this.highlightedTaskId === taskId) this.highlightedTaskId = null }, 3000) },
@@ -164,7 +185,13 @@ export const useBoardStore = defineStore('board', {
     updateAssignee(id, updates) { const i = this.assignees.findIndex(a => a.id === id); if (i !== -1) this.assignees[i] = { ...this.assignees[i], ...updates } },
     deleteAssignee(id) {
       this.tasks.forEach(t => { if (t.assigneeIds) t.assigneeIds = t.assigneeIds.filter(aId => aId !== id) });
-      this.assignees = this.assignees.filter(a => a.id !== id)
+      this.assignees = this.assignees.filter(a => a.id !== id);
+      this.assigneeFilterIds = this.assigneeFilterIds.filter(fId => fId !== id);
+    },
+    toggleAssigneeFilter(id) {
+      const idx = this.assigneeFilterIds.indexOf(id)
+      if (idx === -1) this.assigneeFilterIds.push(id)
+      else this.assigneeFilterIds.splice(idx, 1)
     }
   }
 })
