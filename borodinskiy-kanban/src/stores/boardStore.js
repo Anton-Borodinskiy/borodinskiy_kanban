@@ -13,13 +13,14 @@ const storage = {
   }
 }
 
+// ИСПРАВЛЕНИЕ: Базовый размер теперь w-80
 const defaultState = {
   settings: { theme: 'system', activeBoardId: 'board-1' },
   assignees: [{ id: 'user-1', name: 'Alexander Borodin', initials: 'AB', color: '#3B82F6', avatar: null }],
   boards: [{ id: 'board-1', title: 'Main Project', createdAt: new Date().toISOString() }],
   columns: [
-    { id: 'col-1', boardId: 'board-1', title: 'To Do', order: 0, width: 'w-72', isArchive: false, wipLimit: 0 },
-    { id: 'col-2', boardId: 'board-1', title: 'Done', order: 1, width: 'w-72', isArchive: true, wipLimit: 0 }
+    { id: 'col-1', boardId: 'board-1', title: 'To Do', order: 0, width: 'w-80', isArchive: false, wipLimit: 0 },
+    { id: 'col-2', boardId: 'board-1', title: 'Done', order: 1, width: 'w-80', isArchive: true, wipLimit: 0 }
   ],
   tasks: []
 }
@@ -62,14 +63,12 @@ export const useBoardStore = defineStore('board', {
       try {
         const data = await storage.get('kanban_data')
         if (data && Array.isArray(data.columns) && Array.isArray(data.tasks)) {
-          // МИГРАЦИИ
           data.tasks.forEach(t => {
             if (t.assigneeId !== undefined) { t.assigneeIds = t.assigneeId ? [t.assigneeId] : []; delete t.assigneeId }
             if (!t.subtasks) t.subtasks = []
             if (!t.tags) t.tags = []
           })
           data.columns.forEach(c => { if (c.wipLimit === undefined) c.wipLimit = 0 })
-
           this.$patch({ settings: data.settings, assignees: data.assignees || [], boards: data.boards, columns: data.columns, tasks: data.tasks })
         } else this.$patch(defaultState)
       } catch (e) { this.$patch(defaultState) }
@@ -103,23 +102,34 @@ export const useBoardStore = defineStore('board', {
       this.tasks.filter(t => colMapping[t.columnId]).forEach(t => { this.tasks.push({ ...t, id: generateId('task'), columnId: colMapping[t.columnId] }) })
       this.settings.activeBoardId = newBoardId
     },
-    // НОВОЕ: Перемещение досок
     moveBoard(boardId, direction) {
       const idx = this.boards.findIndex(b => b.id === boardId)
       if (idx === -1) return
       const newIdx = idx + direction
       if (newIdx >= 0 && newIdx < this.boards.length) {
-        const temp = this.boards[idx]
-        this.boards[idx] = this.boards[newIdx]
-        this.boards[newIdx] = temp
+        const temp = this.boards[idx]; this.boards[idx] = this.boards[newIdx]; this.boards[newIdx] = temp
       }
     },
 
-    addColumn(boardId, title, isArchive = false) { this.columns.push({ id: generateId('col'), boardId, title, order: this.columns.filter(c => c.boardId === boardId).length, width: 'w-72', isArchive, wipLimit: 0 }) },
+    // ИСПРАВЛЕНИЕ: Базовый размер w-80
+    addColumn(boardId, title, isArchive = false) { this.columns.push({ id: generateId('col'), boardId, title, order: this.columns.filter(c => c.boardId === boardId).length, width: 'w-80', isArchive, wipLimit: 0 }) },
     updateColumn(id, updates) { const index = this.columns.findIndex(c => c.id === id); if (index !== -1) this.columns[index] = { ...this.columns[index], ...updates } },
     deleteColumn(id) { this.columns = this.columns.filter(c => c.id !== id); this.tasks = this.tasks.filter(t => t.columnId !== id) },
     toggleColumnArchive(columnId) { const col = this.columns.find(c => c.id === columnId); if (col) col.isArchive = !col.isArchive },
     setColumnWip(columnId, limit) { const col = this.columns.find(c => c.id === columnId); if (col) col.wipLimit = parseInt(limit) || 0 },
+
+    // НОВОЕ: Перемещение колонок
+    moveColumn(columnId, direction) {
+      const columns = this.activeColumns
+      const idx = columns.findIndex(c => c.id === columnId)
+      if (idx === -1) return
+      const newIdx = idx + direction
+      if (newIdx >= 0 && newIdx < columns.length) {
+        const tempOrder = columns[idx].order
+        columns[idx].order = columns[newIdx].order
+        columns[newIdx].order = tempOrder
+      }
+    },
 
     openNewTaskModal(columnId = null) {
       const targetColId = columnId || (this.activeColumns[0]?.id)
@@ -152,6 +162,9 @@ export const useBoardStore = defineStore('board', {
 
     addAssignee() { const newUser = { id: generateId('user'), name: 'New Employee', initials: 'EE', color: '#6366f1', avatar: null }; this.assignees.push(newUser); return newUser },
     updateAssignee(id, updates) { const i = this.assignees.findIndex(a => a.id === id); if (i !== -1) this.assignees[i] = { ...this.assignees[i], ...updates } },
-    deleteAssignee(id) { this.tasks.forEach(t => { if (t.assigneeIds) t.assigneeIds = t.assigneeIds.filter(aId => aId !== id) }); this.assignees = this.assignees.filter(a => a.id !== id) }
+    deleteAssignee(id) {
+      this.tasks.forEach(t => { if (t.assigneeIds) t.assigneeIds = t.assigneeIds.filter(aId => aId !== id) });
+      this.assignees = this.assignees.filter(a => a.id !== id)
+    }
   }
 })
