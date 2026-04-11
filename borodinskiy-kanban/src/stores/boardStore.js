@@ -21,7 +21,7 @@ const storage = {
 
 const defaultState = {
   settings: { theme: 'system', activeBoardId: 'board-1', isCompactMode: false },
-  assignees: [{ id: 'user-1', name: 'Alexander Borodin', initials: 'AB', color: '#3B82F6', avatar: null }],
+  assignees: [{ id: 'user-1', name: 'Anton Borodinskiy', initials: 'AB', color: '#3B82F6', avatar: null }],
   boards: [{ id: 'board-1', title: 'Main Project', background: null, createdAt: new Date().toISOString() }],
   columns: [
     { id: 'col-1', boardId: 'board-1', title: 'To Do', order: 0, width: 'w-80', isArchive: false, wipLimit: 0 },
