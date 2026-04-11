@@ -13,6 +13,29 @@ const storage = {
   }
 }
 
+// Генератор приятного звука завершения задачи (без внешних файлов)
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+const playDing = () => {
+  if (audioCtx.state === 'suspended') audioCtx.resume()
+  const osc = audioCtx.createOscillator()
+  const gainNode = audioCtx.createGain()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(800, audioCtx.currentTime)
+  osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1)
+  gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime)
+  gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3)
+  osc.connect(gainNode); gainNode.connect(audioCtx.destination)
+  osc.start(); osc.stop(audioCtx.currentTime + 0.3)
+}
+
+const defaultState = {
+  settings: { theme: 'system', activeBoardId: 'board-1', isCompactMode: false },
+  assignees: [{ id: 'user-1', name: 'Alexander Borodin', initials: 'AB', color: '#3B82F6', avatar: null }],
+  boards: [{ id: 'board-1', title: 'Main Project', background: null, createdAt: new Date().toISOString() }],
+  columns: [{ id: 'col-1', boardId: 'board-1', title: 'To Do', order: 0, width: 'w-80', isArchive: false, wipLimit: 0 }, { id: 'col-2', boardId: 'board-1', title: 'Done', order: 1, width: 'w-80', isArchive: true, wipLimit: 0 }],
+  tasks: []
+}
+
 const generateId = (prefix) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`
 let saveTimeout = null;
 
@@ -20,10 +43,9 @@ export const useBoardStore = defineStore('board', {
   state: () => ({
     settings: {}, assignees: [], boards: [], columns: [], tasks: [], isLoaded: false,
     isModalOpen: false, editingTask: null,
-    // ИСПРАВЛЕНИЕ: Добавлен inputValue и isColumnsLocked
     dialog: { isOpen: false, type: 'confirm', title: '', message: '', confirmText: 'OK', isDanger: false, inputValue: '', resolve: null },
     isSettingsOpen: false, highlightedTaskId: null, currentView: 'board', assigneeFilterIds: [],
-    isColumnsLocked: true
+    isColumnsLocked: true, isDraggingTask: false // UI состояния
   }),
 
   getters: {
@@ -36,10 +58,10 @@ export const useBoardStore = defineStore('board', {
   },
 
   actions: {
-    // ИСПРАВЛЕНИЕ: Передача inputValue в опции диалога
     requestDialog(options) { return new Promise((resolve) => { this.dialog = { isOpen: true, type: options.type || 'confirm', title: options.title || '', message: options.message || '', confirmText: options.confirmText || 'OK', isDanger: options.isDanger || false, inputValue: options.inputValue || '', resolve } }) },
     closeDialog(result = null) { if (this.dialog.resolve) this.dialog.resolve(result); this.dialog.isOpen = false; this.dialog.resolve = null },
     openSettings() { this.isSettingsOpen = true }, closeSettings() { this.isSettingsOpen = false },
+    playSound() { playDing() },
 
     applyTheme() {
       const isDark = this.settings.theme === 'dark' || (this.settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -47,35 +69,31 @@ export const useBoardStore = defineStore('board', {
       else document.documentElement.classList.remove('dark')
     },
     toggleTheme() { this.settings.theme = document.documentElement.classList.contains('dark') ? 'light' : 'dark'; this.applyTheme(); this.saveData() },
+    toggleCompactMode() { this.settings.isCompactMode = !this.settings.isCompactMode; this.saveData() },
 
     async loadData() {
       try {
         const data = await storage.get('kanban_data')
         if (data && Array.isArray(data.columns) && Array.isArray(data.tasks)) {
+          if (data.settings.isCompactMode === undefined) data.settings.isCompactMode = false
           this.$patch({ settings: data.settings, assignees: data.assignees || [], boards: data.boards, columns: data.columns, tasks: data.tasks })
         } else this.factoryReset(true)
       } catch (e) { this.factoryReset(true) } finally { this.applyTheme(); this.isLoaded = true }
     },
     async saveData() { if (!this.isLoaded) return; clearTimeout(saveTimeout); saveTimeout = setTimeout(async () => { await storage.set('kanban_data', { settings: this.settings, assignees: this.assignees, boards: this.boards, columns: this.columns, tasks: this.tasks }) }, 300) },
-    async importWorkspace(jsonData) { if (jsonData && Array.isArray(jsonData.boards)) { this.$patch({ settings: jsonData.settings || this.settings, assignees: jsonData.assignees || [], boards: jsonData.boards, columns: jsonData.columns, tasks: jsonData.tasks }); await this.saveData(); this.applyTheme(); return true } return false },
 
     async factoryReset(force = false) {
-      const resetData = () => {
-        this.$patch({
-          settings: { theme: 'system', activeBoardId: 'board-1' }, assignees: [], tasks: [], assigneeFilterIds: [], currentView: 'board', isColumnsLocked: true,
-          boards: [{ id: 'board-1', title: 'Main Project', createdAt: new Date().toISOString() }],
-          columns: [{ id: 'col-1', boardId: 'board-1', title: 'To Do', order: 0, width: 'w-80', isArchive: false, wipLimit: 0 }, { id: 'col-2', boardId: 'board-1', title: 'Done', order: 1, width: 'w-80', isArchive: true, wipLimit: 0 }]
-        })
-      }
+      const resetData = () => { this.$patch({ settings: { theme: 'system', activeBoardId: 'board-1', isCompactMode: false }, assignees: [], tasks: [], assigneeFilterIds: [], currentView: 'board', isColumnsLocked: true, boards: [{ id: 'board-1', title: 'Main Project', background: null, createdAt: new Date().toISOString() }], columns: [{ id: 'col-1', boardId: 'board-1', title: 'To Do', order: 0, width: 'w-80', isArchive: false, wipLimit: 0 }, { id: 'col-2', boardId: 'board-1', title: 'Done', order: 1, width: 'w-80', isArchive: true, wipLimit: 0 }] }) }
       if (force) { resetData(); return }
-      const confirmed = await this.requestDialog({ type: 'confirm', title: 'FACTORY RESET', message: 'Are you absolutely sure? ALL your boards, tasks, and employees will be permanently deleted!', confirmText: 'Yes, Delete Everything', isDanger: true })
+      const confirmed = await this.requestDialog({ type: 'confirm', title: 'FACTORY RESET', message: 'Delete ALL boards, tasks, and employees?', confirmText: 'Yes, Delete Everything', isDanger: true })
       if (confirmed) { resetData(); await this.saveData(); this.applyTheme(); this.closeSettings() }
     },
 
-    addBoard(title) { const newBoard = { id: generateId('board'), title, createdAt: new Date().toISOString() }; this.boards.push(newBoard); this.settings.activeBoardId = newBoard.id; this.addColumn(newBoard.id, 'To Do', false); this.addColumn(newBoard.id, 'Done', true) },
+    addBoard(title) { const newBoard = { id: generateId('board'), title, background: null, createdAt: new Date().toISOString() }; this.boards.push(newBoard); this.settings.activeBoardId = newBoard.id; this.addColumn(newBoard.id, 'To Do', false); this.addColumn(newBoard.id, 'Done', true) },
     renameBoard(id, newTitle) { const board = this.boards.find(b => b.id === id); if (board) board.title = newTitle },
+    updateBoardBackground(id, bg) { const board = this.boards.find(b => b.id === id); if (board) { board.background = bg; this.saveData() } },
     async deleteActiveBoard() {
-      const confirmed = await this.requestDialog({ type: 'confirm', title: 'Delete Board', message: 'Are you sure? Archived tasks will be saved, but active columns and tasks will be deleted.', confirmText: 'Delete Board', isDanger: true })
+      const confirmed = await this.requestDialog({ type: 'confirm', title: 'Delete Board', message: 'Active tasks will be deleted.', confirmText: 'Delete Board', isDanger: true })
       if(confirmed) {
          const boardId = this.settings.activeBoardId; const colIds = this.columns.filter(c => c.boardId === boardId).map(c => c.id)
          this.tasks = this.tasks.filter(t => t.isArchived || !colIds.includes(t.columnId))
@@ -83,7 +101,7 @@ export const useBoardStore = defineStore('board', {
          this.settings.activeBoardId = this.boards.length > 0 ? this.boards[0].id : null
       }
     },
-    duplicateBoard() { const board = this.activeBoard; if(!board) return; const newBoardId = generateId('board'); this.boards.push({ id: newBoardId, title: board.title + ' (Copy)', createdAt: new Date().toISOString() }); const colMapping = {}; this.columns.filter(c => c.boardId === board.id).forEach(c => { const newColId = generateId('col'); colMapping[c.id] = newColId; this.columns.push({ ...c, id: newColId, boardId: newBoardId }) }); this.tasks.filter(t => colMapping[t.columnId]).forEach(t => { this.tasks.push({ ...t, id: generateId('task'), columnId: colMapping[t.columnId] }) }); this.settings.activeBoardId = newBoardId },
+    duplicateBoard() { const board = this.activeBoard; if(!board) return; const newBoardId = generateId('board'); this.boards.push({ id: newBoardId, title: board.title + ' (Copy)', background: board.background, createdAt: new Date().toISOString() }); const colMapping = {}; this.columns.filter(c => c.boardId === board.id).forEach(c => { const newColId = generateId('col'); colMapping[c.id] = newColId; this.columns.push({ ...c, id: newColId, boardId: newBoardId }) }); this.tasks.filter(t => colMapping[t.columnId]).forEach(t => { this.tasks.push({ ...t, id: generateId('task'), columnId: colMapping[t.columnId] }) }); this.settings.activeBoardId = newBoardId },
     moveBoard(boardId, direction) { const idx = this.boards.findIndex(b => b.id === boardId); if (idx === -1) return; const newIdx = idx + direction; if (newIdx >= 0 && newIdx < this.boards.length) { const temp = this.boards[idx]; this.boards[idx] = this.boards[newIdx]; this.boards[newIdx] = temp } },
 
     addColumn(boardId, title, isArchive = false) { this.columns.push({ id: generateId('col'), boardId, title, order: this.columns.filter(c => c.boardId === boardId).length, width: 'w-80', isArchive, wipLimit: 0 }) },
