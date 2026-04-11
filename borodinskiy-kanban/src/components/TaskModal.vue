@@ -29,7 +29,6 @@ const removeSubtask = (idx) => store.editingTask.subtasks.splice(idx, 1)
 const save = () => { if (!store.editingTask.title.trim()) return; store.saveTask(store.editingTask) }
 const remove = () => { if (confirm('Are you sure you want to delete this task?')) store.deleteTask(store.editingTask.id) }
 
-// Палитра цветов
 const taskColors = [
   { id: 'default', class: 'bg-gray-200 dark:bg-gray-600' },
   { id: 'red', class: 'bg-red-400' },
@@ -52,7 +51,7 @@ const taskColors = [
       <div class="p-6 overflow-y-auto flex-1 space-y-5">
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title *</label>
-          <input v-model="store.editingTask.title" type="text" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" placeholder="What needs to be done?" autofocus>
+          <input v-model="store.editingTask.title" @keyup.enter="save" type="text" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" placeholder="What needs to be done?" autofocus>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -67,15 +66,17 @@ const taskColors = [
             </div>
           </div>
 
-          <div>
-             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Task Color</label>
-             <div class="flex flex-wrap gap-2">
-                <button
-                  v-for="color in taskColors" :key="color.id"
-                  @click="store.editingTask.color = color.id"
-                  :class="['w-8 h-8 rounded-full border-2 transition-transform', color.class, store.editingTask.color === color.id ? 'border-gray-900 dark:border-white scale-110 shadow-md' : 'border-transparent hover:scale-105 opacity-70']"
-                  :title="color.id"
-                ></button>
+          <div class="flex flex-col justify-between">
+             <div>
+               <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Task Color</label>
+               <div class="flex flex-wrap gap-2 mb-4">
+                  <button v-for="color in taskColors" :key="color.id" @click="store.editingTask.color = color.id" :class="['w-8 h-8 rounded-full border-2 transition-transform', color.class, store.editingTask.color === color.id ? 'border-gray-900 dark:border-white scale-110 shadow-md' : 'border-transparent hover:scale-105 opacity-70']" :title="color.id"></button>
+               </div>
+             </div>
+
+             <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
+                <input v-model="store.editingTask.dueDate" type="date" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white p-2 border focus:ring-2 focus:ring-blue-500 cursor-pointer">
              </div>
           </div>
         </div>
@@ -91,17 +92,7 @@ const taskColors = [
           <textarea v-if="descTab === 'edit'" v-model="store.editingTask.description" rows="5" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white p-2 border resize-y" placeholder="Add details, markdown supported..."></textarea>
           <div v-else class="prose prose-sm dark:prose-invert max-w-none p-3 border border-dashed border-gray-300 dark:border-gray-600 rounded-md min-h-[120px] bg-gray-50 dark:bg-black/20" v-html="renderMarkdown(store.editingTask.description)"></div>
         </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
-          <div class="relative">
-            <CalendarDaysIcon class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              v-model="store.editingTask.dueDate"
-              type="date"
-              class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white pl-10 p-2 border focus:ring-2 focus:ring-blue-500"
-            >
-          </div>
-        </div>
+
         <div>
            <div class="flex justify-between items-center mb-2">
              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Checklist</label>

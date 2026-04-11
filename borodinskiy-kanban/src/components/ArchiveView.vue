@@ -11,24 +11,20 @@ const currentPage = ref(1)
 
 const filteredAndSorted = computed(() => {
   let result = [...store.archivedTasks]
-
   if (search.value) {
     const q = search.value.toLowerCase()
-    result = result.filter(t => t.title.toLowerCase().includes(q) || (t.closingComment && t.closingComment.toLowerCase().includes(q)))
+    result = result.filter(t => t.title?.toLowerCase().includes(q) || t.closingComment?.toLowerCase().includes(q))
   }
-
   result.sort((a, b) => {
     if (sortBy.value === 'date_desc') return new Date(b.archivedAt || 0) - new Date(a.archivedAt || 0)
     if (sortBy.value === 'date_asc') return new Date(a.archivedAt || 0) - new Date(b.archivedAt || 0)
-    if (sortBy.value === 'title_asc') return a.title.localeCompare(b.title)
+    if (sortBy.value === 'title_asc') return (a.title || '').localeCompare(b.title || '')
     return 0
   })
-
   return result
 })
 
 const totalPages = computed(() => Math.ceil(filteredAndSorted.value.length / itemsPerPage.value) || 1)
-
 const paginatedTasks = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value
   return filteredAndSorted.value.slice(start, start + itemsPerPage.value)
@@ -36,8 +32,7 @@ const paginatedTasks = computed(() => {
 
 const formatDate = (isoString) => {
   if (!isoString) return '-'
-  const d = new Date(isoString)
-  return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const d = new Date(isoString); return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
 const getBoardName = (boardId) => {
@@ -75,7 +70,7 @@ const remove = (id) => { if(confirm('Permanently delete this task?')) store.dele
     </div>
 
     <div class="flex-1 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm flex flex-col">
-      <table class="w-full text-left border-collapse flex-1">
+      <table class="w-full text-left border-collapse">
         <thead class="sticky top-0 bg-gray-50 dark:bg-gray-900/90 backdrop-blur z-10 shadow-sm">
           <tr class="border-b border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300">
             <th class="p-4 w-1/3">Task Title</th>
@@ -96,7 +91,7 @@ const remove = (id) => { if(confirm('Permanently delete this task?')) store.dele
             <td class="p-4 text-sm text-gray-500 dark:text-gray-400">{{ formatDate(task.archivedAt) }}</td>
             <td class="p-4 text-sm text-gray-500 dark:text-gray-400 truncate max-w-[200px]" :title="task.closingComment">{{ task.closingComment || '-' }}</td>
             <td class="p-4 flex justify-end gap-2">
-              <button @click="restore(task.id)" class="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded" title="Restore to current Active Board"><ArrowUturnLeftIcon class="w-4 h-4" /></button>
+              <button @click="restore(task.id)" class="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded" title="Restore to Board"><ArrowUturnLeftIcon class="w-4 h-4" /></button>
               <button @click="remove(task.id)" class="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded" title="Delete Permanently"><TrashIcon class="w-4 h-4" /></button>
             </td>
           </tr>
@@ -106,7 +101,7 @@ const remove = (id) => { if(confirm('Permanently delete this task?')) store.dele
         </tbody>
       </table>
 
-      <div class="border-t border-gray-200 dark:border-gray-700 p-4 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50 rounded-b-xl">
+      <div class="border-t border-gray-200 dark:border-gray-700 p-4 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50 rounded-b-xl mt-auto">
         <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
           <span>Show:</span>
           <select v-model="itemsPerPage" @change="currentPage = 1" class="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 outline-none cursor-pointer">
@@ -115,14 +110,12 @@ const remove = (id) => { if(confirm('Permanently delete this task?')) store.dele
             <option :value="100">100</option>
           </select>
         </div>
-
         <div class="flex gap-1">
-          <button @click="currentPage--" :disabled="currentPage === 1" class="px-3 py-1 rounded bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 disabled:opacity-50 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">Prev</button>
+          <button @click="currentPage--" :disabled="currentPage === 1" class="px-3 py-1 rounded bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 disabled:opacity-50 hover:bg-gray-50 transition-colors">Prev</button>
           <span class="px-4 py-1 text-sm font-medium text-gray-700 dark:text-gray-300">Page {{ currentPage }} of {{ totalPages }}</span>
-          <button @click="currentPage++" :disabled="currentPage === totalPages" class="px-3 py-1 rounded bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 disabled:opacity-50 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">Next</button>
+          <button @click="currentPage++" :disabled="currentPage === totalPages" class="px-3 py-1 rounded bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 disabled:opacity-50 hover:bg-gray-50 transition-colors">Next</button>
         </div>
       </div>
-
     </div>
   </div>
 </template>

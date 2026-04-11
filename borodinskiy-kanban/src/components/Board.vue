@@ -10,10 +10,11 @@ const props = defineProps({ searchQuery: String, searchScope: String })
 const store = useBoardStore()
 const columnTasksCache = {}
 const editingColId = ref(null)
-
-// Локальное состояние для раскрытых чеклистов (ID задачи -> boolean)
 const expandedSubtasks = reactive({})
 
+DOMPurify.addHook('afterSanitizeAttributes', function(node) {
+  if (node.tagName === 'A') { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
+});
 const renderMarkdown = (text) => text ? DOMPurify.sanitize(marked.parse(text)) : ''
 const getAssignee = (id) => store.assignees.find(a => a.id === id)
 
@@ -26,14 +27,10 @@ const colorClasses = {
   purple: 'bg-purple-50 dark:bg-purple-900/30 border-purple-200 dark:border-purple-800 hover:border-purple-400',
 }
 
-// Логика цвета даты
 const getDueDateInfo = (dateString) => {
   if (!dateString) return null
-  const now = new Date()
-  const due = new Date(dateString)
-  const diff = due - now
+  const now = new Date(); const due = new Date(dateString); const diff = due - now
   const days = Math.ceil(diff / (1000 * 60 * 60 * 24))
-
   if (diff < 0) return { label: 'Overdue', class: 'text-red-600 dark:text-red-400 font-bold' }
   if (days <= 2) return { label: 'Soon', class: 'text-orange-500 dark:text-orange-400 font-medium' }
   return { label: new Date(dateString).toLocaleDateString(), class: 'text-gray-500 dark:text-gray-400' }
@@ -45,6 +42,10 @@ const getTasks = (columnId) => {
       get: () => {
         let tasks = store.tasks.filter(t => t.columnId === columnId && !t.isArchived).sort((a, b) => a.order - b.order)
         if (store.assigneeFilterIds.length > 0) tasks = tasks.filter(t => t.assigneeIds?.some(id => store.assigneeFilterIds.includes(id)))
+        if (props.searchScope === 'current' && props.searchQuery?.trim().length > 1) {
+          const q = props.searchQuery.toLowerCase().trim()
+          tasks = tasks.filter(t => t.title?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q) || t.closingComment?.toLowerCase().includes(q))
+        }
         return tasks
       },
       set: (newTasks) => { newTasks.forEach((task, index) => { const t = store.tasks.find(x => x.id === task.id); if (t) { t.columnId = columnId; t.order = index } }) }
@@ -57,15 +58,33 @@ const toggleArchiveTask = async (task) => {
   const confirmed = await store.requestDialog({ type: 'confirm', title: 'Archive Task', message: 'Move this task to the Global Archive?', confirmText: 'Archive' })
   if (confirmed) store.archiveTask(task.id)
 }
+const addNewColumn = async () => { const result = await store.requestDialog({ type: 'addColumn', title: 'Add New Column', confirmText: 'Add' }); if (result) store.addColumn(store.settings.activeBoardId, result.title, result.isArchive) }
+const removeColumn = async (id) => { const confirmed = await store.requestDialog({ type: 'confirm', title: 'Delete Column', message: 'Delete column and ALL tasks? This cannot be undone.', confirmText: 'Delete', isDanger: true }); if (confirmed) store.deleteColumn(id) }
+const setWipLimit = async (col) => { const result = await store.requestDialog({ type: 'prompt', title: 'Set WIP Limit', message: 'Enter max number of tasks (0 for no limit):', confirmText: 'Set Limit' }); if (result !== null) store.setColumnWip(col.id, result) }
+const clearArchiveColumn = async (columnId) => { const count = getTasks(columnId).value.length; if (count === 0) return; const confirmed = await store.requestDialog({ type: 'confirm', title: 'Clear Column', message: `Move ${count} tasks to the Global Archive?`, confirmText: 'Archive' }); if (confirmed) store.archiveAllInColumn(columnId) }
+
+// ИСПРАВЛЕНИЕ: Безопасный поиск для рамки
+const isSearchMatch = (task) => {
+  if (!props.searchQuery || props.searchQuery.trim().length < 2 || props.searchScope !== 'current') return false;
+  const q = props.searchQuery.toLowerCase().trim();
+  return task.title?.toLowerCase().includes(q) || task.description?.toLowerCase().includes(q) || task.closingComment?.toLowerCase().includes(q);
+}
 </script>
 
 <template>
-  <div class="flex flex-1 overflow-x-auto gap-8 p-6 items-start h-full">
+  <div v-if="store.activeColumns.length === 0" class="h-full flex flex-col items-center justify-center text-center px-4">
+    <div class="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 max-w-md w-full">
+      <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">This board is empty</h2>
+      <button @click="addNewColumn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-colors">+ Create First Column</button>
+    </div>
+  </div>
+
+  <div v-else class="flex flex-1 overflow-x-auto gap-8 p-6 items-start h-full">
 
     <div v-for="(column, index) in store.activeColumns" :key="column.id" :class="['flex-shrink-0 relative group/col-wrapper transition-all duration-300', column.width]">
 
-      <button @click="store.moveColumn(column.id, -1)" class="absolute -left-6 inset-y-0 w-6 flex items-center justify-center opacity-0 group-hover/col-wrapper:opacity-100 hover:bg-blue-500/10 dark:hover:bg-blue-400/10 text-gray-400 hover:text-blue-600 rounded-l-xl transition-all z-10 disabled:hidden" :disabled="index === 0"><ChevronLeftIcon class="w-5 h-5" /></button>
-      <button @click="store.moveColumn(column.id, 1)" class="absolute -right-6 inset-y-0 w-6 flex items-center justify-center opacity-0 group-hover/col-wrapper:opacity-100 hover:bg-blue-500/10 dark:hover:bg-blue-400/10 text-gray-400 hover:text-blue-600 rounded-r-xl transition-all z-10 disabled:hidden" :disabled="index === store.activeColumns.length - 1"><ChevronRightIcon class="w-5 h-5" /></button>
+      <button @click="store.moveColumn(column.id, -1)" class="absolute -left-6 top-[5%] bottom-[5%] w-6 flex items-center justify-center opacity-0 group-hover/col-wrapper:opacity-100 hover:bg-blue-500/10 dark:hover:bg-blue-400/10 text-gray-400 hover:text-blue-600 rounded-l-xl transition-all z-10 disabled:hidden" :disabled="index === 0"><ChevronLeftIcon class="w-5 h-5" /></button>
+      <button @click="store.moveColumn(column.id, 1)" class="absolute -right-6 top-[5%] bottom-[5%] w-6 flex items-center justify-center opacity-0 group-hover/col-wrapper:opacity-100 hover:bg-blue-500/10 dark:hover:bg-blue-400/10 text-gray-400 hover:text-blue-600 rounded-r-xl transition-all z-10 disabled:hidden" :disabled="index === store.activeColumns.length - 1"><ChevronRightIcon class="w-5 h-5" /></button>
 
       <div :class="['flex-1 flex flex-col bg-gray-200 dark:bg-gray-800 rounded-2xl max-h-full shadow-sm border-2 transition-colors', (column.wipLimit > 0 && getTasks(column.id).value.length > column.wipLimit) ? 'border-red-400' : 'border-transparent']">
 
@@ -77,7 +96,7 @@ const toggleArchiveTask = async (task) => {
           </div>
 
           <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-             <button v-if="column.isArchive" @click="store.archiveAllInColumn(column.id)" class="w-5 h-5 text-indigo-500 hover:text-indigo-700" title="Archive All"><ArrowDownOnSquareStackIcon class="w-4 h-4"/></button>
+             <button v-if="column.isArchive" @click="clearArchiveColumn(column.id)" class="w-5 h-5 text-indigo-500 hover:text-indigo-700" title="Archive All"><ArrowDownOnSquareStackIcon class="w-4 h-4"/></button>
              <button @click="store.toggleColumnArchive(column.id)" :class="['w-5 h-5 flex items-center justify-center transition-colors', column.isArchive ? 'text-green-500' : 'text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300']"><ArchiveBoxIcon class="w-4 h-4" /></button>
              <button @click="store.updateColumn(column.id, { width: 'w-72' })" class="w-5 h-5 text-xs font-bold text-gray-400 hover:text-blue-500">S</button>
              <button @click="store.updateColumn(column.id, { width: 'w-80' })" class="w-5 h-5 text-xs font-bold text-gray-400 hover:text-blue-500">M</button>
@@ -86,7 +105,7 @@ const toggleArchiveTask = async (task) => {
         </div>
 
         <VueDraggable v-model="getTasks(column.id).value" group="tasks" class="flex-1 overflow-y-auto p-3 space-y-3 min-h-[100px]" ghostClass="opacity-40" :animation="150">
-          <div v-for="task in getTasks(column.id).value" :key="task.id" @click="store.openEditTaskModal(task)" :class="['p-4 rounded-xl shadow-sm cursor-pointer border-2 transition-all relative group/card', colorClasses[task.color || 'default']]">
+          <div v-for="task in getTasks(column.id).value" :key="task.id" @click="store.openEditTaskModal(task)" :class="['p-4 rounded-xl shadow-sm cursor-pointer border-2 transition-all relative group/card', colorClasses[task.color || 'default'], store.highlightedTaskId === task.id ? '!border-yellow-400 ring-4 ring-yellow-400/30 scale-[1.02] z-10' : '', isSearchMatch(task) ? '!border-blue-400 ring-4 ring-blue-400/30' : '']">
 
             <button @click.stop="toggleArchiveTask(task)" class="absolute top-2 right-2 opacity-0 group-hover/card:opacity-100 p-1 text-gray-400 hover:text-indigo-500 transition-opacity"><ArchiveBoxIcon class="w-3.5 h-3.5" /></button>
 
