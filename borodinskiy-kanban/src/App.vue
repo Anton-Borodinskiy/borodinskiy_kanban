@@ -7,7 +7,6 @@ import DashboardView from './components/DashboardView.vue'
 import TaskModal from './components/TaskModal.vue'
 import GlobalDialog from './components/GlobalDialog.vue'
 import SettingsModal from './components/SettingsModal.vue'
-// Добавлена ViewColumnsIcon для логотипа в шапке
 import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon, Cog6ToothIcon, ViewColumnsIcon, DocumentDuplicateIcon, PencilIcon, ChevronLeftIcon, ChevronRightIcon, UsersIcon, ArchiveBoxIcon, TrashIcon, LockClosedIcon, LockOpenIcon, ChartPieIcon, Bars3Icon, Squares2X2Icon } from '@heroicons/vue/24/outline'
 
 const store = useBoardStore()
@@ -44,7 +43,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-if="store.isLoaded" class="h-screen flex flex-col overflow-hidden text-gray-900 dark:text-gray-100 transition-colors" :style="store.activeBoard?.background && store.currentView === 'board' ? { background: store.activeBoard.background.startsWith('data:') || store.activeBoard.background.startsWith('http') ? `url(${store.activeBoard.background}) center/cover no-repeat` : store.activeBoard.background } : { backgroundColor: store.settings.theme === 'dark' || document?.documentElement?.classList.contains('dark') ? '#111827' : '#F9FAFB' }">
+  <div v-if="store.isLoaded" class="h-screen flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors" :style="store.activeBoard?.background && store.currentView === 'board' ? { background: store.activeBoard.background.startsWith('data:') || store.activeBoard.background.startsWith('http') ? `url(${store.activeBoard.background}) center/cover no-repeat` : store.activeBoard.background } : {}">
     <header class="flex-shrink-0 bg-white/90 dark:bg-gray-800/90 backdrop-blur border-b border-gray-200 dark:border-gray-700 px-6 py-3 flex justify-between items-center z-30">
 
       <div class="flex items-center gap-4">
