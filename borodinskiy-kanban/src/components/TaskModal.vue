@@ -3,10 +3,12 @@ import { useBoardStore } from '../stores/boardStore'
 import { computed, ref } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { TrashIcon, PlusIcon } from '@heroicons/vue/24/outline'
 
 const store = useBoardStore()
 const descTab = ref('edit')
 const commentTab = ref('edit')
+const tagInput = ref('')
 
 const isArchiveColumn = computed(() => {
   if (!store.editingTask) return false
@@ -14,12 +16,8 @@ const isArchiveColumn = computed(() => {
   return column?.isArchive || false
 })
 
-const renderMarkdown = (text) => {
-  if (!text) return ''
-  return DOMPurify.sanitize(marked.parse(text))
-}
+const renderMarkdown = (text) => text ? DOMPurify.sanitize(marked.parse(text)) : ''
 
-// НОВОЕ: Логика выбора нескольких исполнителей
 const toggleAssignee = (id) => {
   if (!store.editingTask.assigneeIds) store.editingTask.assigneeIds = []
   const idx = store.editingTask.assigneeIds.indexOf(id)
@@ -27,21 +25,31 @@ const toggleAssignee = (id) => {
   else store.editingTask.assigneeIds.splice(idx, 1)
 }
 
+// НОВОЕ: Теги
+const addTag = () => {
+  const val = tagInput.value.trim().toUpperCase()
+  if (val && !store.editingTask.tags.includes(val)) store.editingTask.tags.push(val)
+  tagInput.value = ''
+}
+const removeTag = (idx) => store.editingTask.tags.splice(idx, 1)
+
+// НОВОЕ: Сабтаски
+const addSubtask = () => { store.editingTask.subtasks.push({ title: '', done: false }) }
+const removeSubtask = (idx) => store.editingTask.subtasks.splice(idx, 1)
+
 const save = () => {
   if (!store.editingTask.title.trim()) return
   store.saveTask(store.editingTask)
 }
 
-const remove = () => {
-  if (confirm('Are you sure you want to delete this task?')) store.deleteTask(store.editingTask.id)
-}
+const remove = () => { if (confirm('Are you sure you want to delete this task?')) store.deleteTask(store.editingTask.id) }
 </script>
 
 <template>
   <div v-if="store.isModalOpen && store.editingTask" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @mousedown.self="store.closeModal">
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
 
-      <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+      <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50 rounded-t-xl">
         <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ store.editingTask.isNew ? 'Create New Task' : 'Edit Task' }}</h3>
         <button @click="store.closeModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl leading-none">&times;</button>
       </div>
@@ -52,18 +60,26 @@ const remove = () => {
           <input v-model="store.editingTask.title" type="text" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" placeholder="What needs to be done?" autofocus>
         </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Assignees</label>
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-for="user in store.assignees" :key="user.id"
-              @click="toggleAssignee(user.id)"
-              :class="['flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium transition-all duration-200', store.editingTask.assigneeIds.includes(user.id) ? 'bg-blue-50 border-blue-500 text-blue-700 dark:bg-blue-900/40 dark:border-blue-400 dark:text-blue-300 shadow-sm' : 'bg-white border-gray-300 text-gray-600 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 opacity-60 hover:opacity-100']"
-            >
-              <div v-if="user.avatar" class="w-5 h-5 rounded-full overflow-hidden shrink-0"><img :src="user.avatar" class="w-full h-full object-cover" /></div>
-              <div v-else class="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0" :style="{ backgroundColor: user.color }">{{ user.initials }}</div>
-              {{ user.name }}
-            </button>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Assignees</label>
+            <div class="flex flex-wrap gap-2">
+              <button v-for="user in store.assignees" :key="user.id" @click="toggleAssignee(user.id)" :class="['flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium transition-all duration-200', store.editingTask.assigneeIds.includes(user.id) ? 'bg-blue-50 border-blue-500 text-blue-700 dark:bg-blue-900/40 dark:border-blue-400 dark:text-blue-300 shadow-sm' : 'bg-white border-gray-300 text-gray-600 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 opacity-60 hover:opacity-100']">
+                <div v-if="user.avatar" class="w-5 h-5 rounded-full overflow-hidden shrink-0"><img :src="user.avatar" class="w-full h-full object-cover" /></div>
+                <div v-else class="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0" :style="{ backgroundColor: user.color }">{{ user.initials }}</div>
+                {{ user.name }}
+              </button>
+            </div>
+          </div>
+
+          <div>
+             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Labels / Tags</label>
+             <div class="flex flex-wrap gap-2 mb-2">
+               <span v-for="(tag, idx) in store.editingTask.tags" :key="idx" class="text-xs font-bold uppercase px-2 py-1 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center gap-1">
+                 {{ tag }} <button @click="removeTag(idx)" class="hover:text-red-500">&times;</button>
+               </span>
+             </div>
+             <input v-model="tagInput" @keyup.enter="addTag" type="text" class="w-full text-sm rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 p-1 border focus:border-indigo-500" placeholder="Type and press Enter...">
           </div>
         </div>
 
@@ -77,6 +93,20 @@ const remove = () => {
           </div>
           <textarea v-if="descTab === 'edit'" v-model="store.editingTask.description" rows="5" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white p-2 border resize-y" placeholder="Add details, markdown supported..."></textarea>
           <div v-else class="prose prose-sm dark:prose-invert max-w-none p-3 border border-dashed border-gray-300 dark:border-gray-600 rounded-md min-h-[120px] bg-gray-50 dark:bg-black/20" v-html="renderMarkdown(store.editingTask.description)"></div>
+        </div>
+
+        <div>
+           <div class="flex justify-between items-center mb-2">
+             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Checklist</label>
+             <button @click="addSubtask" class="text-xs text-blue-600 hover:underline flex items-center gap-1"><PlusIcon class="w-3 h-3"/> Add Item</button>
+           </div>
+           <div class="space-y-2">
+             <div v-for="(subtask, idx) in store.editingTask.subtasks" :key="idx" class="flex items-center gap-2">
+               <input type="checkbox" v-model="subtask.done" class="rounded text-blue-600 w-4 h-4 cursor-pointer border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+               <input type="text" v-model="subtask.title" :class="['flex-1 text-sm border-b border-transparent focus:border-gray-300 dark:focus:border-gray-600 bg-transparent outline-none transition-all', subtask.done ? 'line-through text-gray-400' : 'text-gray-800 dark:text-gray-200']" placeholder="To do item...">
+               <button @click="removeSubtask(idx)" class="text-gray-400 hover:text-red-500"><TrashIcon class="w-4 h-4" /></button>
+             </div>
+           </div>
         </div>
 
         <div :class="{'bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800': isArchiveColumn}">

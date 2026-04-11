@@ -5,7 +5,7 @@ import Board from './components/Board.vue'
 import TaskModal from './components/TaskModal.vue'
 import GlobalDialog from './components/GlobalDialog.vue'
 import SettingsModal from './components/SettingsModal.vue'
-import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon, Cog6ToothIcon, ViewColumnsIcon, DocumentDuplicateIcon, PencilIcon } from '@heroicons/vue/24/outline'
+import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon, Cog6ToothIcon, ViewColumnsIcon, DocumentDuplicateIcon, PencilIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/outline'
 
 const store = useBoardStore()
 const searchQuery = ref('')
@@ -31,22 +31,12 @@ const navigateToTask = (task) => {
   }
 }
 
-const createNewBoard = async () => {
-  const title = await store.requestDialog({ type: 'prompt', title: 'Create New Board', message: 'Enter a title for your new workspace:', confirmText: 'Create' })
-  if (title) store.addBoard(title)
-}
-
-const renameActiveBoard = async () => {
-  const title = await store.requestDialog({ type: 'prompt', title: 'Rename Board', message: 'Enter new title:', confirmText: 'Rename' })
-  if (title) store.renameBoard(store.settings.activeBoardId, title)
-}
+const createNewBoard = async () => { const title = await store.requestDialog({ type: 'prompt', title: 'Create New Board', message: 'Enter a title for your new workspace:', confirmText: 'Create' }); if (title) store.addBoard(title) }
+const renameActiveBoard = async () => { const title = await store.requestDialog({ type: 'prompt', title: 'Rename Board', message: 'Enter new title:', confirmText: 'Rename' }); if (title) store.renameBoard(store.settings.activeBoardId, title) }
 
 onMounted(() => {
   store.loadData()
-  // ИСПРАВЛЕНИЕ: Вызываем saveData только если данные уже успешно загружены
-  store.$subscribe(() => {
-    if (store.isLoaded) store.saveData()
-  })
+  store.$subscribe(() => { if (store.isLoaded) store.saveData() })
 })
 </script>
 
@@ -65,9 +55,12 @@ onMounted(() => {
         </div>
 
         <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-md pr-1 ml-2 border border-transparent focus-within:border-gray-300 dark:focus-within:border-gray-500 transition-colors">
-          <select v-model="store.settings.activeBoardId" class="bg-transparent border-none text-sm py-1.5 pl-3 pr-8 focus:outline-none focus:ring-0 outline-none cursor-pointer text-gray-900 dark:text-white">
+          <button @click="store.moveBoard(store.settings.activeBoardId, -1)" class="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"><ChevronLeftIcon class="w-4 h-4" /></button>
+          <select v-model="store.settings.activeBoardId" class="bg-transparent border-none text-sm py-1.5 px-1 w-48 sm:w-64 focus:outline-none focus:ring-0 outline-none cursor-pointer text-gray-900 dark:text-white font-medium truncate">
             <option v-for="board in store.boards" :key="board.id" :value="board.id" class="dark:bg-gray-800">{{ board.title }}</option>
           </select>
+          <button @click="store.moveBoard(store.settings.activeBoardId, 1)" class="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mr-1"><ChevronRightIcon class="w-4 h-4" /></button>
+
           <button @click="renameActiveBoard" class="p-1 text-gray-500 hover:text-orange-600 dark:text-gray-400 dark:hover:text-orange-400 rounded outline-none" title="Rename Board"><PencilIcon class="w-4 h-4" /></button>
           <button @click="createNewBoard" class="p-1 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 rounded outline-none" title="Create New Board"><PlusIcon class="w-4 h-4" /></button>
           <button @click="store.duplicateBoard" class="p-1 text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 rounded outline-none" title="Duplicate Board"><DocumentDuplicateIcon class="w-4 h-4" /></button>
@@ -82,10 +75,10 @@ onMounted(() => {
           </button>
         </div>
 
-        <div class="relative flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 transition-shadow">
-          <div class="pl-3 text-gray-400"><MagnifyingGlassIcon class="w-4 h-4" /></div>
-          <input v-model="searchQuery" type="text" placeholder="Search tasks..." class="bg-transparent border-none text-sm py-1.5 px-3 w-48 lg:w-64 focus:outline-none focus:ring-0 outline-none text-gray-900 dark:text-white">
-          <select v-model="searchScope" class="bg-gray-200 dark:bg-gray-600 border-none text-xs py-1.5 pl-2 pr-6 focus:outline-none focus:ring-0 outline-none cursor-pointer border-l border-gray-300 dark:border-gray-500 text-gray-700 dark:text-white">
+        <div class="relative flex items-center focus-within:ring-2 focus-within:ring-blue-500 transition-shadow rounded-lg">
+          <div class="pl-3 text-gray-400 absolute left-0 z-10"><MagnifyingGlassIcon class="w-4 h-4" /></div>
+          <input v-model="searchQuery" type="text" placeholder="Search tasks..." class="bg-gray-100 dark:bg-gray-700 border-none text-sm py-1.5 pl-9 pr-3 w-48 lg:w-64 focus:outline-none focus:ring-0 outline-none text-gray-900 dark:text-white rounded-l-lg">
+          <select v-model="searchScope" class="bg-gray-200 dark:bg-gray-600 border-none text-xs py-1.5 pl-2 pr-6 focus:outline-none focus:ring-0 outline-none cursor-pointer border-l border-gray-300 dark:border-gray-500 text-gray-700 dark:text-white rounded-r-lg">
             <option value="current" class="dark:bg-gray-700">Current Board</option>
             <option value="all" class="dark:bg-gray-700">All Boards</option>
           </select>

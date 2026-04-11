@@ -2,21 +2,14 @@ import { defineStore } from 'pinia'
 
 const storage = {
   async get(key) {
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      const data = await chrome.storage.local.get(key)
-      return data[key]
-    }
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) return (await chrome.storage.local.get(key))[key]
     const localData = localStorage.getItem(key)
     return localData ? JSON.parse(localData) : null
   },
   async set(key, value) {
-    // ВАЖНО: Очищаем Vue-прокси перед сохранением, иначе Chrome выдает DataCloneError
     const rawValue = JSON.parse(JSON.stringify(value))
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      await chrome.storage.local.set({ [key]: rawValue })
-    } else {
-      localStorage.setItem(key, JSON.stringify(rawValue))
-    }
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) await chrome.storage.local.set({ [key]: rawValue })
+    else localStorage.setItem(key, JSON.stringify(rawValue))
   }
 }
 
@@ -25,15 +18,14 @@ const defaultState = {
   assignees: [{ id: 'user-1', name: 'Alexander Borodin', initials: 'AB', color: '#3B82F6', avatar: null }],
   boards: [{ id: 'board-1', title: 'Main Project', createdAt: new Date().toISOString() }],
   columns: [
-    { id: 'col-1', boardId: 'board-1', title: 'To Do', order: 0, width: 'w-72', isArchive: false },
-    { id: 'col-2', boardId: 'board-1', title: 'Done', order: 1, width: 'w-72', isArchive: true }
+    { id: 'col-1', boardId: 'board-1', title: 'To Do', order: 0, width: 'w-72', isArchive: false, wipLimit: 0 },
+    { id: 'col-2', boardId: 'board-1', title: 'Done', order: 1, width: 'w-72', isArchive: true, wipLimit: 0 }
   ],
   tasks: []
 }
 
 const generateId = (prefix) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`
-
-let saveTimeout = null; // Для оптимизации сохранений
+let saveTimeout = null;
 
 export const useBoardStore = defineStore('board', {
   state: () => ({
@@ -52,17 +44,9 @@ export const useBoardStore = defineStore('board', {
   },
 
   actions: {
-    requestDialog(options) {
-      return new Promise((resolve) => {
-        this.dialog = { isOpen: true, type: options.type || 'confirm', title: options.title || '', message: options.message || '', confirmText: options.confirmText || 'OK', isDanger: options.isDanger || false, resolve }
-      })
-    },
-    closeDialog(result = null) {
-      if (this.dialog.resolve) this.dialog.resolve(result);
-      this.dialog.isOpen = false; this.dialog.resolve = null
-    },
-    openSettings() { this.isSettingsOpen = true },
-    closeSettings() { this.isSettingsOpen = false },
+    requestDialog(options) { return new Promise((resolve) => { this.dialog = { isOpen: true, type: options.type || 'confirm', title: options.title || '', message: options.message || '', confirmText: options.confirmText || 'OK', isDanger: options.isDanger || false, resolve } }) },
+    closeDialog(result = null) { if (this.dialog.resolve) this.dialog.resolve(result); this.dialog.isOpen = false; this.dialog.resolve = null },
+    openSettings() { this.isSettingsOpen = true }, closeSettings() { this.isSettingsOpen = false },
 
     applyTheme() {
       const isDark = this.settings.theme === 'dark' || (this.settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -70,63 +54,45 @@ export const useBoardStore = defineStore('board', {
       else document.documentElement.classList.remove('dark')
     },
     toggleTheme() {
-      const isCurrentlyDark = document.documentElement.classList.contains('dark')
-      this.settings.theme = isCurrentlyDark ? 'light' : 'dark'
-      this.applyTheme()
-      this.saveData()
+      this.settings.theme = document.documentElement.classList.contains('dark') ? 'light' : 'dark'
+      this.applyTheme(); this.saveData()
     },
 
     async loadData() {
       try {
         const data = await storage.get('kanban_data')
         if (data && Array.isArray(data.columns) && Array.isArray(data.tasks)) {
+          // МИГРАЦИИ
           data.tasks.forEach(t => {
-            if (t.assigneeId !== undefined) {
-              t.assigneeIds = t.assigneeId ? [t.assigneeId] : []
-              delete t.assigneeId
-            }
+            if (t.assigneeId !== undefined) { t.assigneeIds = t.assigneeId ? [t.assigneeId] : []; delete t.assigneeId }
+            if (!t.subtasks) t.subtasks = []
+            if (!t.tags) t.tags = []
           })
+          data.columns.forEach(c => { if (c.wipLimit === undefined) c.wipLimit = 0 })
+
           this.$patch({ settings: data.settings, assignees: data.assignees || [], boards: data.boards, columns: data.columns, tasks: data.tasks })
         } else this.$patch(defaultState)
       } catch (e) { this.$patch(defaultState) }
-      finally {
-        this.applyTheme()
-        this.isLoaded = true
-      }
+      finally { this.applyTheme(); this.isLoaded = true }
     },
-
-    // ИСПРАВЛЕНИЕ: Защита от перезаписи при старте и оптимизация (debounce)
     async saveData() {
       if (!this.isLoaded) return;
       clearTimeout(saveTimeout);
-      saveTimeout = setTimeout(async () => {
-        const { settings, assignees, boards, columns, tasks } = this.$state
-        await storage.set('kanban_data', { settings, assignees, boards, columns, tasks })
-      }, 300)
+      saveTimeout = setTimeout(async () => { await storage.set('kanban_data', { settings: this.settings, assignees: this.assignees, boards: this.boards, columns: this.columns, tasks: this.tasks }) }, 300)
     },
-
     async importWorkspace(jsonData) {
-      if (jsonData && Array.isArray(jsonData.boards)) {
-        this.$patch({ settings: jsonData.settings || this.settings, assignees: jsonData.assignees || [], boards: jsonData.boards, columns: jsonData.columns, tasks: jsonData.tasks })
-        await this.saveData(); this.applyTheme(); return true
-      }
+      if (jsonData && Array.isArray(jsonData.boards)) { this.$patch({ settings: jsonData.settings || this.settings, assignees: jsonData.assignees || [], boards: jsonData.boards, columns: jsonData.columns, tasks: jsonData.tasks }); await this.saveData(); this.applyTheme(); return true }
       return false
     },
 
     addBoard(title) {
       const newBoard = { id: generateId('board'), title, createdAt: new Date().toISOString() }
-      this.boards.push(newBoard)
-      this.settings.activeBoardId = newBoard.id
-      this.addColumn(newBoard.id, 'To Do', false)
-      this.addColumn(newBoard.id, 'Done (Archive)', true)
+      this.boards.push(newBoard); this.settings.activeBoardId = newBoard.id
+      this.addColumn(newBoard.id, 'To Do', false); this.addColumn(newBoard.id, 'Done (Archive)', true)
     },
-    renameBoard(id, newTitle) {
-      const board = this.boards.find(b => b.id === id)
-      if (board) board.title = newTitle
-    },
+    renameBoard(id, newTitle) { const board = this.boards.find(b => b.id === id); if (board) board.title = newTitle },
     duplicateBoard() {
-      const board = this.activeBoard
-      if(!board) return
+      const board = this.activeBoard; if(!board) return
       const newBoardId = generateId('board')
       this.boards.push({ id: newBoardId, title: board.title + ' (Copy)', createdAt: new Date().toISOString() })
       const colMapping = {}
@@ -134,26 +100,38 @@ export const useBoardStore = defineStore('board', {
          const newColId = generateId('col'); colMapping[c.id] = newColId
          this.columns.push({ ...c, id: newColId, boardId: newBoardId })
       })
-      this.tasks.filter(t => colMapping[t.columnId]).forEach(t => {
-         this.tasks.push({ ...t, id: generateId('task'), columnId: colMapping[t.columnId] })
-      })
+      this.tasks.filter(t => colMapping[t.columnId]).forEach(t => { this.tasks.push({ ...t, id: generateId('task'), columnId: colMapping[t.columnId] }) })
       this.settings.activeBoardId = newBoardId
     },
+    // НОВОЕ: Перемещение досок
+    moveBoard(boardId, direction) {
+      const idx = this.boards.findIndex(b => b.id === boardId)
+      if (idx === -1) return
+      const newIdx = idx + direction
+      if (newIdx >= 0 && newIdx < this.boards.length) {
+        const temp = this.boards[idx]
+        this.boards[idx] = this.boards[newIdx]
+        this.boards[newIdx] = temp
+      }
+    },
 
-    addColumn(boardId, title, isArchive = false) { this.columns.push({ id: generateId('col'), boardId, title, order: this.columns.filter(c => c.boardId === boardId).length, width: 'w-72', isArchive }) },
+    addColumn(boardId, title, isArchive = false) { this.columns.push({ id: generateId('col'), boardId, title, order: this.columns.filter(c => c.boardId === boardId).length, width: 'w-72', isArchive, wipLimit: 0 }) },
     updateColumn(id, updates) { const index = this.columns.findIndex(c => c.id === id); if (index !== -1) this.columns[index] = { ...this.columns[index], ...updates } },
     deleteColumn(id) { this.columns = this.columns.filter(c => c.id !== id); this.tasks = this.tasks.filter(t => t.columnId !== id) },
     toggleColumnArchive(columnId) { const col = this.columns.find(c => c.id === columnId); if (col) col.isArchive = !col.isArchive },
+    setColumnWip(columnId, limit) { const col = this.columns.find(c => c.id === columnId); if (col) col.wipLimit = parseInt(limit) || 0 },
 
     openNewTaskModal(columnId = null) {
       const targetColId = columnId || (this.activeColumns[0]?.id)
       if (!targetColId) return
-      this.editingTask = { id: generateId('task'), columnId: targetColId, assigneeIds: [], title: '', description: '', order: this.tasks.filter(t => t.columnId === targetColId).length, createdAt: new Date().toISOString(), closedAt: null, closingComment: null, isNew: true }
+      this.editingTask = { id: generateId('task'), columnId: targetColId, assigneeIds: [], tags: [], subtasks: [], title: '', description: '', order: this.tasks.filter(t => t.columnId === targetColId).length, createdAt: new Date().toISOString(), closedAt: null, closingComment: null, isNew: true }
       this.isModalOpen = true
     },
     openEditTaskModal(task) {
       this.editingTask = JSON.parse(JSON.stringify(task));
       if(!this.editingTask.assigneeIds) this.editingTask.assigneeIds = [];
+      if(!this.editingTask.tags) this.editingTask.tags = [];
+      if(!this.editingTask.subtasks) this.editingTask.subtasks = [];
       this.isModalOpen = true
     },
     closeModal() { this.isModalOpen = false; this.editingTask = null },
@@ -170,16 +148,10 @@ export const useBoardStore = defineStore('board', {
       let tasksToSearch = scope === 'current' ? this.tasks.filter(t => this.activeColumns.map(c=>c.id).includes(t.columnId)) : this.tasks
       return tasksToSearch.filter(t => t.title.toLowerCase().includes(q) || (t.description && t.description.toLowerCase().includes(q)) || (t.closingComment && t.closingComment.toLowerCase().includes(q)))
     },
-    setHighlight(taskId) {
-      this.highlightedTaskId = taskId
-      setTimeout(() => { if (this.highlightedTaskId === taskId) this.highlightedTaskId = null }, 3000)
-    },
+    setHighlight(taskId) { this.highlightedTaskId = taskId; setTimeout(() => { if (this.highlightedTaskId === taskId) this.highlightedTaskId = null }, 3000) },
 
     addAssignee() { const newUser = { id: generateId('user'), name: 'New Employee', initials: 'EE', color: '#6366f1', avatar: null }; this.assignees.push(newUser); return newUser },
     updateAssignee(id, updates) { const i = this.assignees.findIndex(a => a.id === id); if (i !== -1) this.assignees[i] = { ...this.assignees[i], ...updates } },
-    deleteAssignee(id) {
-      this.tasks.forEach(t => { if (t.assigneeIds) t.assigneeIds = t.assigneeIds.filter(aId => aId !== id) });
-      this.assignees = this.assignees.filter(a => a.id !== id)
-    }
+    deleteAssignee(id) { this.tasks.forEach(t => { if (t.assigneeIds) t.assigneeIds = t.assigneeIds.filter(aId => aId !== id) }); this.assignees = this.assignees.filter(a => a.id !== id) }
   }
 })
