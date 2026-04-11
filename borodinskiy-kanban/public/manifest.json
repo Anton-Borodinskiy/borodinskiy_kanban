@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Borodinskiy Kanban",
+  "version": "1.0.0",
+  "description": "Flexible and customizable Kanban board.",
+  "action": {
+    "default_title": "Open Borodinskiy Kanban"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage",
+    "tabs"
+  ]
+}
