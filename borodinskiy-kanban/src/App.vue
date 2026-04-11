@@ -5,13 +5,12 @@ import Board from './components/Board.vue'
 import TaskModal from './components/TaskModal.vue'
 import GlobalDialog from './components/GlobalDialog.vue'
 import SettingsModal from './components/SettingsModal.vue'
-import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon, Cog6ToothIcon, ViewColumnsIcon } from '@heroicons/vue/24/outline'
+import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon, Cog6ToothIcon, ViewColumnsIcon, DocumentDuplicateIcon } from '@heroicons/vue/24/outline'
 
 const store = useBoardStore()
 const searchQuery = ref('')
 const searchScope = ref('current')
 
-// Результаты для глобального поиска
 const searchResults = computed(() => {
   if (searchScope.value === 'all' && searchQuery.value.length > 1) {
     return store.searchTasks(searchQuery.value, 'all')
@@ -23,16 +22,21 @@ const navigateToTask = (task) => {
   const column = store.columns.find(c => c.id === task.columnId)
   if (column) {
     store.settings.activeBoardId = column.boardId
+    searchQuery.value = ''
     setTimeout(() => {
-      store.openEditTaskModal(task)
-      searchQuery.value = ''
-    }, 50)
+      store.setHighlight(task.id)
+      const el = document.getElementById(`task-${task.id}`)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 150)
   }
 }
 
+// ИСПРАВЛЕНИЕ: Гарантированная смена темы и сохранение
 const toggleTheme = () => {
-  store.settings.theme = store.settings.theme === 'dark' ? 'light' : 'dark'
+  const isCurrentlyDark = document.documentElement.classList.contains('dark')
+  store.settings.theme = isCurrentlyDark ? 'light' : 'dark'
   applyTheme()
+  store.saveData() // Сохраняем немедленно!
 }
 
 const applyTheme = () => {
@@ -45,12 +49,12 @@ const createNewBoard = async () => {
   const title = await store.requestDialog({ type: 'prompt', title: 'Create New Board', message: 'Enter a title for your new workspace:', confirmText: 'Create' })
   if (title) store.addBoard(title)
 }
+const duplicateBoard = () => store.duplicateBoard()
 
 onMounted(() => {
   store.loadData()
   store.$subscribe(() => store.saveData())
-  watch(() => store.settings.theme, applyTheme)
-  setTimeout(applyTheme, 100)
+  setTimeout(applyTheme, 50)
 })
 </script>
 
@@ -68,19 +72,33 @@ onMounted(() => {
           </h1>
         </div>
 
-        <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-md pr-1 ml-2">
-          <select v-model="store.settings.activeBoardId" class="bg-transparent border-none text-sm py-1.5 pl-3 pr-8 focus:ring-2 focus:ring-blue-500 cursor-pointer text-gray-900 dark:text-white">
+        <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-md pr-1 ml-2 border border-transparent focus-within:border-gray-300 dark:focus-within:border-gray-500 transition-colors">
+          <select v-model="store.settings.activeBoardId" class="bg-transparent border-none text-sm py-1.5 pl-3 pr-8 focus:outline-none focus:ring-0 outline-none cursor-pointer text-gray-900 dark:text-white">
             <option v-for="board in store.boards" :key="board.id" :value="board.id" class="dark:bg-gray-800">{{ board.title }}</option>
           </select>
-          <button @click="createNewBoard" class="p-1 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 rounded transition-colors"><PlusIcon class="w-4 h-4" /></button>
+          <button @click="createNewBoard" class="p-1 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 rounded outline-none" title="Create New Board"><PlusIcon class="w-4 h-4" /></button>
+          <button @click="duplicateBoard" class="p-1 text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 rounded outline-none" title="Duplicate Board"><DocumentDuplicateIcon class="w-4 h-4" /></button>
         </div>
       </div>
 
-      <div class="flex items-center gap-4">
+      <div class="flex items-center gap-3">
+
+        <div class="hidden md:flex items-center gap-1 mr-2 border-r border-gray-200 dark:border-gray-700 pr-3">
+          <button
+            v-for="user in store.assignees" :key="user.id"
+            @click="store.assigneeFilterId = store.assigneeFilterId === user.id ? null : user.id"
+            :class="['w-7 h-7 rounded-full overflow-hidden border-2 transition-all', store.assigneeFilterId === user.id ? 'border-blue-500 scale-110 shadow-md' : 'border-transparent opacity-70 hover:opacity-100']"
+            :title="`Filter by ${user.name}`"
+          >
+            <img v-if="user.avatar" :src="user.avatar" class="w-full h-full object-cover" />
+            <div v-else class="w-full h-full flex items-center justify-center text-[9px] font-bold text-white" :style="{ backgroundColor: user.color }">{{ user.initials }}</div>
+          </button>
+        </div>
+
         <div class="relative flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg focus-within:ring-2 focus-within:ring-blue-500 transition-shadow">
           <div class="pl-3 text-gray-400"><MagnifyingGlassIcon class="w-4 h-4" /></div>
-          <input v-model="searchQuery" type="text" placeholder="Search tasks..." class="bg-transparent border-none text-sm py-1.5 px-3 w-48 lg:w-64 focus:outline-none focus:ring-0 text-gray-900 dark:text-white">
-          <select v-model="searchScope" class="bg-gray-200 dark:bg-gray-600 border-none text-xs py-1.5 pl-2 pr-6 focus:ring-0 cursor-pointer border-l border-gray-300 dark:border-gray-500 text-gray-700 dark:text-white">
+          <input v-model="searchQuery" type="text" placeholder="Search tasks..." class="bg-transparent border-none text-sm py-1.5 px-3 w-48 lg:w-64 focus:outline-none focus:ring-0 outline-none text-gray-900 dark:text-white">
+          <select v-model="searchScope" class="bg-gray-200 dark:bg-gray-600 border-none text-xs py-1.5 pl-2 pr-6 focus:outline-none focus:ring-0 outline-none cursor-pointer border-l border-gray-300 dark:border-gray-500 text-gray-700 dark:text-white">
             <option value="current" class="dark:bg-gray-700">Current Board</option>
             <option value="all" class="dark:bg-gray-700">All Boards</option>
           </select>
@@ -88,9 +106,7 @@ onMounted(() => {
           <div v-if="searchResults.length > 0" class="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 max-h-96 overflow-y-auto z-50">
             <div v-for="task in searchResults" :key="task.id" @click="navigateToTask(task)" class="p-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer border-b last:border-0 border-gray-100 dark:border-gray-700">
               <div class="text-sm font-medium text-gray-900 dark:text-white">{{ task.title }}</div>
-              <div class="text-[10px] text-blue-500 font-semibold uppercase tracking-wider">
-                Board: {{ store.boards.find(b => b.id === (store.columns.find(c => c.id === task.columnId)?.boardId))?.title }}
-              </div>
+              <div class="text-[10px] text-blue-500 font-semibold uppercase tracking-wider">Board: {{ store.boards.find(b => b.id === (store.columns.find(c => c.id === task.columnId)?.boardId))?.title }}</div>
             </div>
           </div>
         </div>
