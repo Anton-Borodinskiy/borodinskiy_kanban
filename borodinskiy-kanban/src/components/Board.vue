@@ -54,16 +54,12 @@ const getTasks = (columnId) => {
   return columnTasksCache[columnId]
 }
 
-const toggleArchiveTask = async (task) => {
-  const confirmed = await store.requestDialog({ type: 'confirm', title: 'Archive Task', message: 'Move this task to the Global Archive?', confirmText: 'Archive' })
-  if (confirmed) store.archiveTask(task.id)
-}
+const toggleArchiveTask = async (task) => { const confirmed = await store.requestDialog({ type: 'confirm', title: 'Archive Task', message: 'Move this task to the Global Archive?', confirmText: 'Archive' }); if (confirmed) store.archiveTask(task.id) }
 const addNewColumn = async () => { const result = await store.requestDialog({ type: 'addColumn', title: 'Add New Column', confirmText: 'Add' }); if (result) store.addColumn(store.settings.activeBoardId, result.title, result.isArchive) }
 const removeColumn = async (id) => { const confirmed = await store.requestDialog({ type: 'confirm', title: 'Delete Column', message: 'Delete column and ALL tasks? This cannot be undone.', confirmText: 'Delete', isDanger: true }); if (confirmed) store.deleteColumn(id) }
 const setWipLimit = async (col) => { const result = await store.requestDialog({ type: 'prompt', title: 'Set WIP Limit', message: 'Enter max number of tasks (0 for no limit):', confirmText: 'Set Limit' }); if (result !== null) store.setColumnWip(col.id, result) }
 const clearArchiveColumn = async (columnId) => { const count = getTasks(columnId).value.length; if (count === 0) return; const confirmed = await store.requestDialog({ type: 'confirm', title: 'Clear Column', message: `Move ${count} tasks to the Global Archive?`, confirmText: 'Archive' }); if (confirmed) store.archiveAllInColumn(columnId) }
 
-// ИСПРАВЛЕНИЕ: Безопасный поиск для рамки
 const isSearchMatch = (task) => {
   if (!props.searchQuery || props.searchQuery.trim().length < 2 || props.searchScope !== 'current') return false;
   const q = props.searchQuery.toLowerCase().trim();
@@ -80,11 +76,10 @@ const isSearchMatch = (task) => {
   </div>
 
   <div v-else class="flex flex-1 overflow-x-auto gap-8 p-6 items-start h-full">
-
     <div v-for="(column, index) in store.activeColumns" :key="column.id" :class="['flex-shrink-0 relative group/col-wrapper transition-all duration-300', column.width]">
 
-      <button @click="store.moveColumn(column.id, -1)" class="absolute -left-6 top-[5%] bottom-[5%] w-6 flex items-center justify-center opacity-0 group-hover/col-wrapper:opacity-100 hover:bg-blue-500/10 dark:hover:bg-blue-400/10 text-gray-400 hover:text-blue-600 rounded-l-xl transition-all z-10 disabled:hidden" :disabled="index === 0"><ChevronLeftIcon class="w-5 h-5" /></button>
-      <button @click="store.moveColumn(column.id, 1)" class="absolute -right-6 top-[5%] bottom-[5%] w-6 flex items-center justify-center opacity-0 group-hover/col-wrapper:opacity-100 hover:bg-blue-500/10 dark:hover:bg-blue-400/10 text-gray-400 hover:text-blue-600 rounded-r-xl transition-all z-10 disabled:hidden" :disabled="index === store.activeColumns.length - 1"><ChevronRightIcon class="w-5 h-5" /></button>
+      <button v-if="!store.isColumnsLocked" @click="store.moveColumn(column.id, -1)" class="absolute -left-6 top-[5%] bottom-[5%] w-6 flex items-center justify-center opacity-0 group-hover/col-wrapper:opacity-100 hover:bg-blue-500/10 dark:hover:bg-blue-400/10 text-gray-400 hover:text-blue-600 rounded-l-xl transition-all z-10 disabled:hidden" :disabled="index === 0"><ChevronLeftIcon class="w-5 h-5" /></button>
+      <button v-if="!store.isColumnsLocked" @click="store.moveColumn(column.id, 1)" class="absolute -right-6 top-[5%] bottom-[5%] w-6 flex items-center justify-center opacity-0 group-hover/col-wrapper:opacity-100 hover:bg-blue-500/10 dark:hover:bg-blue-400/10 text-gray-400 hover:text-blue-600 rounded-r-xl transition-all z-10 disabled:hidden" :disabled="index === store.activeColumns.length - 1"><ChevronRightIcon class="w-5 h-5" /></button>
 
       <div :class="['flex-1 flex flex-col bg-gray-200 dark:bg-gray-800 rounded-2xl max-h-full shadow-sm border-2 transition-colors', (column.wipLimit > 0 && getTasks(column.id).value.length > column.wipLimit) ? 'border-red-400' : 'border-transparent']">
 
@@ -133,7 +128,6 @@ const isSearchMatch = (task) => {
                   <ChevronDownIcon v-if="!expandedSubtasks[task.id]" class="w-3 h-3" />
                   <ChevronUpIcon v-else class="w-3 h-3" />
                </button>
-
                <div v-if="expandedSubtasks[task.id]" class="mt-2 space-y-1.5">
                   <div v-for="(sub, idx) in task.subtasks" :key="idx" @click="store.toggleSubtask(task.id, idx)" class="flex items-center gap-2 group/sub">
                     <input type="checkbox" :checked="sub.done" class="w-3.5 h-3.5 rounded border-gray-300 pointer-events-none">
@@ -143,11 +137,9 @@ const isSearchMatch = (task) => {
             </div>
           </div>
         </VueDraggable>
-
         <button @click="store.openNewTaskModal(column.id)" class="m-3 p-2 flex items-center justify-center gap-2 text-xs font-bold text-gray-500 hover:text-blue-600 hover:bg-white/50 dark:hover:bg-white/5 rounded-xl transition-all"><PlusIcon class="w-4 h-4" /> Add Task</button>
       </div>
     </div>
-
     <button @click="addNewColumn" class="flex-shrink-0 w-80 bg-gray-200/50 dark:bg-gray-800/50 hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-500 font-bold py-4 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 transition-all">+ Add Column</button>
   </div>
 </template>

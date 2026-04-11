@@ -6,7 +6,7 @@ import ArchiveView from './components/ArchiveView.vue'
 import TaskModal from './components/TaskModal.vue'
 import GlobalDialog from './components/GlobalDialog.vue'
 import SettingsModal from './components/SettingsModal.vue'
-import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon, Cog6ToothIcon, ViewColumnsIcon, DocumentDuplicateIcon, PencilIcon, ChevronLeftIcon, ChevronRightIcon, UsersIcon, ArchiveBoxIcon, TrashIcon } from '@heroicons/vue/24/outline'
+import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon, Cog6ToothIcon, ViewColumnsIcon, DocumentDuplicateIcon, PencilIcon, ChevronLeftIcon, ChevronRightIcon, UsersIcon, ArchiveBoxIcon, TrashIcon, LockClosedIcon, LockOpenIcon } from '@heroicons/vue/24/outline'
 
 const store = useBoardStore()
 const searchQuery = ref('')
@@ -33,7 +33,14 @@ const navigateToTask = (task) => {
 }
 
 const createNewBoard = async () => { const title = await store.requestDialog({ type: 'prompt', title: 'Create New Board', message: 'Enter a title for your new workspace:', confirmText: 'Create' }); if (title) store.addBoard(title) }
-const renameActiveBoard = async () => { const title = await store.requestDialog({ type: 'prompt', title: 'Rename Board', message: 'Enter new title:', confirmText: 'Rename' }); if (title) store.renameBoard(store.settings.activeBoardId, title) }
+
+// ИСПРАВЛЕНИЕ: Передача inputValue
+const renameActiveBoard = async () => {
+  const board = store.activeBoard
+  if (!board) return
+  const title = await store.requestDialog({ type: 'prompt', title: 'Rename Board', message: 'Enter new title:', confirmText: 'Rename', inputValue: board.title });
+  if (title) store.renameBoard(board.id, title)
+}
 
 onMounted(() => {
   store.loadData()
@@ -60,18 +67,21 @@ onMounted(() => {
           <button @click="renameActiveBoard" class="p-1 text-gray-500 hover:text-orange-600 dark:text-gray-400 dark:hover:text-orange-400 rounded outline-none" title="Rename Board"><PencilIcon class="w-4 h-4" /></button>
           <button @click="createNewBoard" class="p-1 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 rounded outline-none" title="Create New Board"><PlusIcon class="w-4 h-4" /></button>
           <button @click="store.duplicateBoard" class="p-1 text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 rounded outline-none" title="Duplicate Board"><DocumentDuplicateIcon class="w-4 h-4" /></button>
-          <button @click="store.deleteActiveBoard()" class="p-1 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 rounded outline-none border-l border-gray-300 dark:border-gray-600 pl-2 ml-1" title="Delete Board"><TrashIcon class="w-4 h-4" />
+
+          <button @click="store.isColumnsLocked = !store.isColumnsLocked" class="p-1 text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 rounded outline-none border-l border-gray-300 dark:border-gray-600 pl-2 ml-1" :title="store.isColumnsLocked ? 'Unlock Columns to Move' : 'Lock Columns'">
+            <LockClosedIcon v-if="store.isColumnsLocked" class="w-4 h-4" />
+            <LockOpenIcon v-else class="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
           </button>
-             </div>
+
+          <button @click="store.deleteActiveBoard()" class="p-1 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 rounded outline-none" title="Delete Board"><TrashIcon class="w-4 h-4" /></button>
+        </div>
       </div>
 
       <div class="flex items-center gap-3">
-
         <div class="relative">
           <button @click="isFilterOpen = !isFilterOpen" :class="['flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border', store.assigneeFilterIds.length > 0 ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-300' : 'bg-gray-100 border-transparent text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600']">
             <UsersIcon class="w-4 h-4" /> Filter <span v-if="store.assigneeFilterIds.length" class="ml-1 bg-blue-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">{{store.assigneeFilterIds.length}}</span>
           </button>
-
           <div v-if="isFilterOpen" class="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50">
             <div class="p-2 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
                <span class="text-xs font-bold text-gray-500 uppercase">Team Members</span>
@@ -80,10 +90,7 @@ onMounted(() => {
             <div class="max-h-64 overflow-y-auto p-2 space-y-1">
               <label v-for="user in store.assignees" :key="user.id" class="flex items-center gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer">
                 <input type="checkbox" :checked="store.assigneeFilterIds.includes(user.id)" @change="store.toggleAssigneeFilter(user.id)" class="rounded text-blue-600 border-gray-300 bg-gray-100 dark:bg-gray-700 dark:border-gray-600">
-                <div class="w-6 h-6 rounded-full overflow-hidden shrink-0">
-                  <img v-if="user.avatar" :src="user.avatar" class="w-full h-full object-cover" />
-                  <div v-else class="w-full h-full flex items-center justify-center text-[10px] font-bold text-white" :style="{ backgroundColor: user.color }">{{ user.initials }}</div>
-                </div>
+                <div class="w-6 h-6 rounded-full overflow-hidden shrink-0"><img v-if="user.avatar" :src="user.avatar" class="w-full h-full object-cover" /><div v-else class="w-full h-full flex items-center justify-center text-[10px] font-bold text-white" :style="{ backgroundColor: user.color }">{{ user.initials }}</div></div>
                 <span class="text-sm text-gray-700 dark:text-gray-200">{{ user.name }}</span>
               </label>
             </div>
@@ -106,10 +113,7 @@ onMounted(() => {
           </div>
         </div>
 
-        <button @click="store.currentView = store.currentView === 'board' ? 'archive' : 'board'" :class="['p-1.5 rounded-md transition-colors border', store.currentView === 'archive' ? 'bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-400' : 'text-gray-500 border-transparent hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-600 bg-gray-100 dark:bg-gray-700']" title="Global Archive">
-          <ArchiveBoxIcon class="w-5 h-5" />
-        </button>
-
+        <button @click="store.currentView = store.currentView === 'board' ? 'archive' : 'board'" :class="['p-1.5 rounded-md transition-colors border', store.currentView === 'archive' ? 'bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-400' : 'text-gray-500 border-transparent hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-600 bg-gray-100 dark:bg-gray-700']" title="Global Archive"><ArchiveBoxIcon class="w-5 h-5" /></button>
         <button @click="store.toggleTheme" class="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-md transition-colors"><MoonIcon v-if="store.settings.theme === 'light'" class="w-5 h-5" /><SunIcon v-else class="w-5 h-5" /></button>
         <button @click="store.openSettings" class="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-md transition-colors"><Cog6ToothIcon class="w-5 h-5" /></button>
         <button @click="store.openNewTaskModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1.5 px-4 rounded-md shadow-sm transition-colors">+ New Task</button>

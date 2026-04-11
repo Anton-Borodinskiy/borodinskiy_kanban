@@ -20,8 +20,10 @@ export const useBoardStore = defineStore('board', {
   state: () => ({
     settings: {}, assignees: [], boards: [], columns: [], tasks: [], isLoaded: false,
     isModalOpen: false, editingTask: null,
-    dialog: { isOpen: false, type: 'confirm', title: '', message: '', confirmText: 'OK', isDanger: false, resolve: null },
-    isSettingsOpen: false, highlightedTaskId: null, currentView: 'board', assigneeFilterIds: []
+    // ИСПРАВЛЕНИЕ: Добавлен inputValue и isColumnsLocked
+    dialog: { isOpen: false, type: 'confirm', title: '', message: '', confirmText: 'OK', isDanger: false, inputValue: '', resolve: null },
+    isSettingsOpen: false, highlightedTaskId: null, currentView: 'board', assigneeFilterIds: [],
+    isColumnsLocked: true
   }),
 
   getters: {
@@ -34,7 +36,8 @@ export const useBoardStore = defineStore('board', {
   },
 
   actions: {
-    requestDialog(options) { return new Promise((resolve) => { this.dialog = { isOpen: true, type: options.type || 'confirm', title: options.title || '', message: options.message || '', confirmText: options.confirmText || 'OK', isDanger: options.isDanger || false, resolve } }) },
+    // ИСПРАВЛЕНИЕ: Передача inputValue в опции диалога
+    requestDialog(options) { return new Promise((resolve) => { this.dialog = { isOpen: true, type: options.type || 'confirm', title: options.title || '', message: options.message || '', confirmText: options.confirmText || 'OK', isDanger: options.isDanger || false, inputValue: options.inputValue || '', resolve } }) },
     closeDialog(result = null) { if (this.dialog.resolve) this.dialog.resolve(result); this.dialog.isOpen = false; this.dialog.resolve = null },
     openSettings() { this.isSettingsOpen = true }, closeSettings() { this.isSettingsOpen = false },
 
@@ -49,12 +52,6 @@ export const useBoardStore = defineStore('board', {
       try {
         const data = await storage.get('kanban_data')
         if (data && Array.isArray(data.columns) && Array.isArray(data.tasks)) {
-          data.tasks.forEach(t => {
-            if (t.assigneeId !== undefined) { t.assigneeIds = t.assigneeId ? [t.assigneeId] : []; delete t.assigneeId }
-            if (!t.subtasks) t.subtasks = []; if (t.color === undefined) t.color = 'default'
-            if (t.isArchived === undefined) t.isArchived = false; if (!t.dueDate) t.dueDate = null
-          })
-          data.columns.forEach(c => { if (c.wipLimit === undefined) c.wipLimit = 0; if (c.width === 'w-64' || c.width === 'w-72') c.width = 'w-80' })
           this.$patch({ settings: data.settings, assignees: data.assignees || [], boards: data.boards, columns: data.columns, tasks: data.tasks })
         } else this.factoryReset(true)
       } catch (e) { this.factoryReset(true) } finally { this.applyTheme(); this.isLoaded = true }
@@ -62,11 +59,10 @@ export const useBoardStore = defineStore('board', {
     async saveData() { if (!this.isLoaded) return; clearTimeout(saveTimeout); saveTimeout = setTimeout(async () => { await storage.set('kanban_data', { settings: this.settings, assignees: this.assignees, boards: this.boards, columns: this.columns, tasks: this.tasks }) }, 300) },
     async importWorkspace(jsonData) { if (jsonData && Array.isArray(jsonData.boards)) { this.$patch({ settings: jsonData.settings || this.settings, assignees: jsonData.assignees || [], boards: jsonData.boards, columns: jsonData.columns, tasks: jsonData.tasks }); await this.saveData(); this.applyTheme(); return true } return false },
 
-    // НОВОЕ: Полный сброс данных
     async factoryReset(force = false) {
       const resetData = () => {
         this.$patch({
-          settings: { theme: 'system', activeBoardId: 'board-1' }, assignees: [], tasks: [], assigneeFilterIds: [], currentView: 'board',
+          settings: { theme: 'system', activeBoardId: 'board-1' }, assignees: [], tasks: [], assigneeFilterIds: [], currentView: 'board', isColumnsLocked: true,
           boards: [{ id: 'board-1', title: 'Main Project', createdAt: new Date().toISOString() }],
           columns: [{ id: 'col-1', boardId: 'board-1', title: 'To Do', order: 0, width: 'w-80', isArchive: false, wipLimit: 0 }, { id: 'col-2', boardId: 'board-1', title: 'Done', order: 1, width: 'w-80', isArchive: true, wipLimit: 0 }]
         })
@@ -122,7 +118,6 @@ export const useBoardStore = defineStore('board', {
     toggleSubtask(taskId, subtaskIdx) { const task = this.tasks.find(t => t.id === taskId); if (task && task.subtasks[subtaskIdx]) { task.subtasks[subtaskIdx].done = !task.subtasks[subtaskIdx].done; this.saveData() } },
     deleteTask(taskId) { this.tasks = this.tasks.filter(t => t.id !== taskId); this.closeModal() },
 
-    // ИСПРАВЛЕНИЕ: Безопасный поиск с optional chaining (?.)
     searchTasks(query, scope = 'current') {
       const q = query.toLowerCase().trim()
       if (!q) return []

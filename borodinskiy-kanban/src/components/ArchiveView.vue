@@ -61,9 +61,9 @@ const remove = (id) => { if(confirm('Permanently delete this task?')) store.dele
         <div class="flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 gap-2">
           <ArrowsUpDownIcon class="w-4 h-4 text-gray-500" />
           <select v-model="sortBy" class="bg-transparent border-none text-sm outline-none cursor-pointer dark:text-white">
-            <option value="date_desc">Newest First</option>
-            <option value="date_asc">Oldest First</option>
-            <option value="title_asc">Title A-Z</option>
+            <option value="date_desc" class="dark:bg-gray-800">Newest First</option>
+            <option value="date_asc" class="dark:bg-gray-800">Oldest First</option>
+            <option value="title_asc" class="dark:bg-gray-800">Title A-Z</option>
           </select>
         </div>
       </div>
@@ -111,9 +111,9 @@ const remove = (id) => { if(confirm('Permanently delete this task?')) store.dele
           </select>
         </div>
         <div class="flex gap-1">
-          <button @click="currentPage--" :disabled="currentPage === 1" class="px-3 py-1 rounded bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 disabled:opacity-50 hover:bg-gray-50 transition-colors">Prev</button>
+          <button @click="currentPage--" :disabled="currentPage === 1" class="px-3 py-1 rounded bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 disabled:opacity-50 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">Prev</button>
           <span class="px-4 py-1 text-sm font-medium text-gray-700 dark:text-gray-300">Page {{ currentPage }} of {{ totalPages }}</span>
-          <button @click="currentPage++" :disabled="currentPage === totalPages" class="px-3 py-1 rounded bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 disabled:opacity-50 hover:bg-gray-50 transition-colors">Next</button>
+          <button @click="currentPage++" :disabled="currentPage === totalPages" class="px-3 py-1 rounded bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 disabled:opacity-50 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">Next</button>
         </div>
       </div>
     </div>

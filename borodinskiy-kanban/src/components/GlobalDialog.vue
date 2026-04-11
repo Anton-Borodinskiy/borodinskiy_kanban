@@ -7,14 +7,16 @@ const inputValue = ref('')
 const isArchive = ref(false)
 const inputRef = ref(null)
 
-// Очищаем форму при открытии
 watch(() => store.dialog.isOpen, async (isOpen) => {
   if (isOpen) {
-    inputValue.value = ''
+    // ИСПРАВЛЕНИЕ: Берем значение из стора
+    inputValue.value = store.dialog.inputValue || ''
     isArchive.value = false
     if (store.dialog.type === 'prompt' || store.dialog.type === 'addColumn') {
       await nextTick()
       inputRef.value?.focus()
+      // ИСПРАВЛЕНИЕ: Сразу выделяем текст, чтобы можно было начать печатать поверх
+      if (inputValue.value) inputRef.value?.select()
     }
   }
 })
@@ -27,7 +29,7 @@ const handleConfirm = () => {
     if (!inputValue.value.trim()) return
     store.closeDialog({ title: inputValue.value.trim(), isArchive: isArchive.value })
   } else {
-    store.closeDialog(true) // Обычный confirm
+    store.closeDialog(true)
   }
 }
 
@@ -47,7 +49,7 @@ const handleCancel = () => store.closeDialog(false)
             ref="inputRef"
             v-model="inputValue"
             type="text"
-            class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+            class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border outline-none"
             placeholder="Type here..."
             @keyup.enter="handleConfirm"
           >
