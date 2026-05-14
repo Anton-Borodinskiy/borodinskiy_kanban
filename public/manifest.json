@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Borodinskiy Kanban",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A beautiful, customizable Kanban board right in your browser. Organize tasks, manage your team, and get things done effortlessly.",
   "action": {
     "default_title": "Open Borodinskiy Kanban",
