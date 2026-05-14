@@ -7,7 +7,7 @@ import DashboardView from './components/DashboardView.vue'
 import TaskModal from './components/TaskModal.vue'
 import GlobalDialog from './components/GlobalDialog.vue'
 import SettingsModal from './components/SettingsModal.vue'
-import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon, Cog6ToothIcon, ViewColumnsIcon, DocumentDuplicateIcon, PencilIcon, ChevronLeftIcon, ChevronRightIcon, UsersIcon, ArchiveBoxIcon, TrashIcon, LockClosedIcon, LockOpenIcon, ChartPieIcon, Bars3Icon, Squares2X2Icon } from '@heroicons/vue/24/outline'
+import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon, Cog6ToothIcon, ViewColumnsIcon, DocumentDuplicateIcon, PencilIcon, ChevronLeftIcon, ChevronRightIcon, UsersIcon, ArchiveBoxIcon, TrashIcon, LockClosedIcon, LockOpenIcon, ChartPieIcon, Bars3Icon, Squares2X2Icon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/vue/24/outline'
 
 const store = useBoardStore()
 const searchQuery = ref('')
@@ -44,7 +44,7 @@ onMounted(() => {
 
 <template>
   <div v-if="store.isLoaded" class="h-screen flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors" :style="store.activeBoard?.background && store.currentView === 'board' ? { background: store.activeBoard.background.startsWith('data:') || store.activeBoard.background.startsWith('http') ? `url(${store.activeBoard.background}) center/cover no-repeat` : store.activeBoard.background } : {}">
-    <header class="flex-shrink-0 bg-white/90 dark:bg-gray-800/90 backdrop-blur border-b border-gray-200 dark:border-gray-700 px-6 py-3 flex justify-between items-center z-30">
+    <header class="flex-shrink-0 bg-white/90 dark:bg-gray-800/90 backdrop-blur border-b border-gray-200 dark:border-gray-700 px-6 py-3 flex flex-wrap gap-y-4 justify-between items-center z-30">
 
       <div class="flex items-center gap-4">
         <div class="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
@@ -108,6 +108,10 @@ onMounted(() => {
              <Bars3Icon v-if="store.settings.isCompactMode" class="w-5 h-5" />
              <Squares2X2Icon v-else class="w-5 h-5" />
           </button>
+          <button @click="store.toggleSound" class="p-1.5 text-gray-500 hover:text-gray-900 bg-gray-100 dark:bg-gray-700 rounded-md transition-colors" :title="store.settings.isSoundEnabled ? 'Mute Sounds' : 'Unmute Sounds'">
+            <SpeakerWaveIcon v-if="store.settings.isSoundEnabled" class="w-5 h-5" />
+            <SpeakerXMarkIcon v-else class="w-5 h-5 text-red-500" />
+           </button>
           <button @click="store.toggleTheme" class="p-1.5 text-gray-500 hover:text-gray-900 bg-gray-100 dark:bg-gray-700 rounded-md transition-colors"><MoonIcon v-if="store.settings.theme === 'light'" class="w-5 h-5" /><SunIcon v-else class="w-5 h-5" /></button>
           <button @click="store.openSettings" class="p-1.5 text-gray-500 hover:text-gray-900 bg-gray-100 dark:bg-gray-700 rounded-md transition-colors"><Cog6ToothIcon class="w-5 h-5" /></button>
         </div>

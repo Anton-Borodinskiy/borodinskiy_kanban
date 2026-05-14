@@ -4,13 +4,14 @@ import { VueDraggable } from 'vue-draggable-plus'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { useBoardStore } from '../stores/boardStore'
-import { PlusIcon, ArchiveBoxIcon, ListBulletIcon, ChevronLeftIcon, ChevronRightIcon, ArrowDownOnSquareStackIcon, CalendarDaysIcon, ChevronDownIcon, ChevronUpIcon, TrashIcon } from '@heroicons/vue/24/outline'
+import { PlusIcon, ArchiveBoxIcon, ListBulletIcon, ChevronLeftIcon, ChevronRightIcon, ArrowDownOnSquareStackIcon, CalendarDaysIcon, ChevronDownIcon, ChevronUpIcon, TrashIcon, LinkIcon  } from '@heroicons/vue/24/outline'
 
 const props = defineProps({ searchQuery: String, searchScope: String })
 const store = useBoardStore()
 const columnTasksCache = {}
 const editingColId = ref(null)
 const expandedSubtasks = reactive({})
+const expandedLinks = reactive({})
 
 DOMPurify.addHook('afterSanitizeAttributes', function(node) {
   if (node.tagName === 'A') { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
@@ -27,13 +28,21 @@ const colorClasses = {
   purple: 'bg-violet-50 hover:bg-violet-100 dark:bg-violet-900/30 dark:hover:bg-violet-900/50 border-violet-200 dark:border-violet-800 hover:border-violet-400',
 }
 
-const getDueDateInfo = (dateString) => {
+const getDueDateInfo = (dateString, isArchive = false) => {
   if (!dateString) return null
-  const now = new Date(); const due = new Date(dateString); const diff = due - now
+  const due = new Date(dateString)
+
+  // Если задача в архиве, просто показываем дату без проверки на просрочку
+  if (isArchive) return { label: due.toLocaleDateString(), class: 'text-gray-500 dark:text-gray-400' }
+
+  const now = new Date()
+  const diff = due - now
   const days = Math.ceil(diff / (1000 * 60 * 60 * 24))
+
   if (diff < 0) return { label: 'Overdue', class: 'text-red-600 dark:text-red-400 font-bold' }
   if (days <= 2) return { label: 'Soon', class: 'text-orange-500 dark:text-orange-400 font-medium' }
-  return { label: new Date(dateString).toLocaleDateString(), class: 'text-gray-500 dark:text-gray-400' }
+
+  return { label: due.toLocaleDateString(), class: 'text-gray-500 dark:text-gray-400' }
 }
 
 const getTasks = (columnId) => {
@@ -56,6 +65,7 @@ const getTasks = (columnId) => {
 
 // Звуковое уведомление (синтезируется браузером)
 const playDing = () => {
+  if (!store.settings.isSoundEnabled) return
   try {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
     if (audioCtx.state === 'suspended') audioCtx.resume()
@@ -134,8 +144,8 @@ watch(dropzoneArchiveTasks, (newVal) => { if(newVal.length > 0) { store.archiveT
             </div>
 
             <template v-if="!store.settings.isCompactMode">
-              <div v-if="task.dueDate" class="flex items-center gap-1.5 mb-2 text-[10px]" :class="getDueDateInfo(task.dueDate).class">
-                 <CalendarDaysIcon class="w-3.5 h-3.5" /><span>{{ getDueDateInfo(task.dueDate).label }}</span>
+              <div v-if="task.dueDate" class="flex items-center gap-1.5 mb-2 text-[10px]" :class="getDueDateInfo(task.dueDate, column.isArchive).class">
+                <CalendarDaysIcon class="w-3.5 h-3.5" /><span>{{ getDueDateInfo(task.dueDate, column.isArchive).label }}</span>
               </div>
               <p v-if="task.description" class="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 mb-2">{{ task.description }}</p>
 
@@ -148,6 +158,27 @@ watch(dropzoneArchiveTasks, (newVal) => { if(newVal.length > 0) { store.archiveT
                     <div v-for="(sub, idx) in task.subtasks" :key="idx" @click="store.toggleSubtask(task.id, idx)" class="flex items-center gap-2 group/sub cursor-pointer">
                       <input type="checkbox" :checked="sub.done" class="w-3.5 h-3.5 rounded border-gray-300 pointer-events-none">
                       <span :class="['text-[11px] flex-1 truncate', sub.done ? 'line-through text-gray-400' : 'text-gray-700 dark:text-gray-200']">{{ sub.title || '...' }}</span>
+                    </div>
+                 </div>
+              </div>
+              <div v-if="task.links?.length" class="mt-2 border-t border-gray-100 dark:border-gray-600/50 pt-2" @click.stop>
+                 <button @click="expandedLinks[task.id] = !expandedLinks[task.id]" class="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 hover:text-blue-500 transition-colors">
+                    <LinkIcon class="w-4 h-4" />
+                    <span>{{ task.links.length }} {{ task.links.length === 1 ? 'Link' : 'Links' }}</span>
+                    <ChevronDownIcon v-if="!expandedLinks[task.id]" class="w-3 h-3" />
+                    <ChevronUpIcon v-else class="w-3 h-3" />
+                 </button>
+
+                 <div v-if="expandedLinks[task.id]" class="mt-2 space-y-1.5">
+                    <div v-for="(link, idx) in task.links" :key="idx" class="flex items-center gap-2 group/link">
+                      <LinkIcon class="w-3 h-3 text-gray-400 shrink-0" />
+                      <a :href="link.url"
+                         target="_blank"
+                         rel="noopener noreferrer"
+                         class="text-[11px] text-blue-600 hover:underline truncate flex-1"
+                         :title="link.url">
+                        {{ link.title || link.url }}
+                      </a>
                     </div>
                  </div>
               </div>

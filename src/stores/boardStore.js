@@ -20,7 +20,7 @@ const storage = {
 }
 
 const defaultState = {
-  settings: { theme: 'system', activeBoardId: 'board-1', isCompactMode: false },
+  settings: { theme: 'system', activeBoardId: 'board-1', isCompactMode: false, isSoundEnabled: true },
   assignees: [{ id: 'user-1', name: 'Anton Borodinskiy', initials: 'AB', color: '#3B82F6', avatar: null }],
   boards: [{ id: 'board-1', title: 'Main Project', background: null, createdAt: new Date().toISOString() }],
   columns: [
@@ -84,7 +84,10 @@ export const useBoardStore = defineStore('board', {
     },
     openSettings() { this.isSettingsOpen = true },
     closeSettings() { this.isSettingsOpen = false },
-
+    toggleSound() {
+      this.settings.isSoundEnabled = !this.settings.isSoundEnabled
+      this.saveData()
+    },
     applyTheme() {
       const isDark = this.settings.theme === 'dark' || (this.settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
       if (isDark) document.documentElement.classList.add('dark')
@@ -293,7 +296,7 @@ export const useBoardStore = defineStore('board', {
       if (!targetColId) return
       this.editingTask = {
         id: generateId('task'), columnId: targetColId, assigneeIds: [], color: 'default',
-        subtasks: [], title: '', description: '', dueDate: null,
+        subtasks: [], links: [], title: '', description: '', dueDate: null, // <-- Добавили links: []
         order: this.tasks.filter(t => t.columnId === targetColId).length,
         createdAt: new Date().toISOString(), closedAt: null, closingComment: null,
         isNew: true, isArchived: false
@@ -304,6 +307,7 @@ export const useBoardStore = defineStore('board', {
       this.editingTask = JSON.parse(JSON.stringify(task))
       if(!this.editingTask.assigneeIds) this.editingTask.assigneeIds = []
       if(!this.editingTask.subtasks) this.editingTask.subtasks = []
+      if(!this.editingTask.links) this.editingTask.links = [] // <-- Добавили поддержку ссылок для старых задач
       this.isModalOpen = true
     },
     closeModal() {

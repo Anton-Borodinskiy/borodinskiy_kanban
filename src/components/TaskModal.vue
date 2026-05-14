@@ -3,7 +3,8 @@ import { useBoardStore } from '../stores/boardStore'
 import { computed, ref, watch } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { TrashIcon, PlusIcon } from '@heroicons/vue/24/outline'
+import { TrashIcon, PlusIcon, LinkIcon } from '@heroicons/vue/24/outline' // Добавь LinkIcon
+
 
 const store = useBoardStore()
 const descTab = ref('edit')
@@ -34,6 +35,19 @@ const removeSubtask = (idx) => store.editingTask.subtasks.splice(idx, 1)
 const save = () => { if (!store.editingTask.title.trim()) return; store.saveTask(store.editingTask) }
 const remove = () => { if (confirm('Are you sure you want to delete this task?')) store.deleteTask(store.editingTask.id) }
 
+// Логика для добавления ссылок
+const newLinkUrl = ref('')
+const newLinkTitle = ref('')
+
+const addLink = () => {
+  if (!newLinkUrl.value.trim()) return
+  let url = newLinkUrl.value.trim()
+  if (!url.startsWith('http://') && !url.startsWith('https://')) url = 'https://' + url // авто-добавление протокола
+  store.editingTask.links.push({ url, title: newLinkTitle.value.trim() || url })
+  newLinkUrl.value = ''
+  newLinkTitle.value = ''
+}
+const removeLink = (idx) => store.editingTask.links.splice(idx, 1)
 // ИСПРАВЛЕНИЕ: Заменен purple на violet для гарантии компиляции
 const taskColors = [
   { id: 'default', class: 'bg-gray-200 dark:bg-gray-600' },
@@ -117,7 +131,23 @@ const handleCustomColor = (e) => { store.editingTask.color = e.target.value }
              </div>
            </div>
         </div>
-
+        <div>
+           <div class="flex justify-between items-center mb-2">
+             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Attached Links</label>
+           </div>
+           <div class="space-y-2 mb-2">
+             <div v-for="(link, idx) in store.editingTask.links" :key="idx" class="flex items-center gap-2 bg-gray-50 dark:bg-gray-700/50 p-2 rounded border border-gray-100 dark:border-gray-600">
+               <LinkIcon class="w-4 h-4 text-gray-400 shrink-0" />
+               <a :href="link.url" target="_blank" class="flex-1 text-sm text-blue-600 hover:underline truncate" :title="link.url">{{ link.title }}</a>
+               <button @click="removeLink(idx)" class="text-gray-400 hover:text-red-500"><TrashIcon class="w-4 h-4" /></button>
+             </div>
+           </div>
+           <div class="flex gap-2">
+              <input type="text" v-model="newLinkTitle" placeholder="Title (e.g. Jira)" class="w-1/3 text-sm rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white p-1.5 border outline-none focus:border-blue-500">
+              <input type="text" v-model="newLinkUrl" @keyup.enter="addLink" placeholder="https://..." class="flex-1 text-sm rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white p-1.5 border outline-none focus:border-blue-500">
+              <button @click="addLink" class="bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded text-sm font-medium flex items-center justify-center shrink-0"><PlusIcon class="w-4 h-4"/></button>
+           </div>
+        </div>
         <div :class="{'bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800': isArchiveColumn}">
           <div class="flex justify-between items-end mb-1">
             <label class="block text-sm font-medium" :class="isArchiveColumn ? 'text-green-800 dark:text-green-300' : 'text-gray-700 dark:text-gray-300'">Closing Comment <span v-if="isArchiveColumn">(Required)</span></label>
