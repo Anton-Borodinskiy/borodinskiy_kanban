@@ -119,7 +119,9 @@ export const useBoardStore = defineStore('board', {
             if (c.wipLimit === undefined) c.wipLimit = 0
             if (c.width === 'w-64' || c.width === 'w-72') c.width = 'w-80'
           })
+          data.settings = data.settings || {}
           if (data.settings.isCompactMode === undefined) data.settings.isCompactMode = false
+          if (data.settings.isSoundEnabled === undefined) data.settings.isSoundEnabled = true
 
           this.$patch({ settings: data.settings, assignees: data.assignees || [], boards: data.boards, columns: data.columns, tasks: data.tasks })
         } else {
@@ -160,7 +162,7 @@ export const useBoardStore = defineStore('board', {
     async factoryReset(force = false) {
       const resetData = () => {
         this.$patch({
-          settings: { theme: 'system', activeBoardId: 'board-1', isCompactMode: false },
+          settings: { theme: 'system', activeBoardId: 'board-1', isCompactMode: false, isSoundEnabled: true },
           assignees: [], tasks: [], assigneeFilterIds: [], currentView: 'board', isColumnsLocked: true,
           boards: [{ id: 'board-1', title: 'Main Project', background: null, createdAt: new Date().toISOString() }],
           columns: [
@@ -277,10 +279,13 @@ export const useBoardStore = defineStore('board', {
     },
     unarchiveTask(taskId) {
       const task = this.tasks.find(t => t.id === taskId)
-      if (task && this.activeColumns.length > 0) {
-        task.isArchived = false
-        task.columnId = this.activeColumns[0].id
-      }
+      if (!task) return
+      let targetColumns = this.columns.filter(c => c.boardId === task.originalBoardId && !c.isArchive)
+      if (targetColumns.length === 0) targetColumns = this.activeColumns
+      const target = [...targetColumns].sort((a, b) => a.order - b.order)[0]
+      if (!target) return
+      task.isArchived = false
+      task.columnId = target.id
     },
     archiveAllInColumn(columnId) {
       const col = this.columns.find(c => c.id === columnId)
