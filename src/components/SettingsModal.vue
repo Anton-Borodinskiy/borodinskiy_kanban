@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useBoardStore } from '../stores/boardStore'
 import AssigneeManager from './AssigneeManager.vue'
 import { ArrowDownTrayIcon, ArrowUpTrayIcon, ExclamationTriangleIcon, PhotoIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { fileToDownscaledDataURL } from '../utils/image'
 
 const store = useBoardStore()
 const activeTab = ref('team')
@@ -65,11 +66,16 @@ const handleImport = (event) => {
   reader.readAsText(file)
 }
 
-const handleBgUpload = (event) => {
+const handleBgUpload = async (event) => {
   const file = event.target.files[0]; if (!file) return
-  const reader = new FileReader()
-  reader.onload = (e) => { store.updateBoardBackground(store.settings.activeBoardId, e.target.result) }
-  reader.readAsDataURL(file)
+  try {
+    // Backgrounds can be large photos — cap to 1920px so they don't blow the quota.
+    const dataUrl = await fileToDownscaledDataURL(file, { maxDim: 1920, quality: 0.82 })
+    store.updateBoardBackground(store.settings.activeBoardId, dataUrl)
+  } catch (e) {
+    store.requestDialog({ type: 'confirm', title: 'Image Error', message: 'Could not process that image. Please try a different file.', confirmText: 'OK' })
+  }
+  event.target.value = ''
 }
 </script>
 

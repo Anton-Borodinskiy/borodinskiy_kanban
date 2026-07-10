@@ -1,18 +1,21 @@
 <script setup>
 import { useBoardStore } from '../stores/boardStore'
 import { TrashIcon, PhotoIcon } from '@heroicons/vue/24/outline'
+import { fileToDownscaledDataURL } from '../utils/image'
 
 const store = useBoardStore()
 
-const handleAvatarUpload = (event, userId) => {
+const handleAvatarUpload = async (event, userId) => {
   const file = event.target.files[0]
   if (!file) return
-
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    store.updateAssignee(userId, { avatar: e.target.result })
+  try {
+    // Avatars render tiny — 256px is plenty and keeps storage small.
+    const dataUrl = await fileToDownscaledDataURL(file, { maxDim: 256, quality: 0.85 })
+    store.updateAssignee(userId, { avatar: dataUrl })
+  } catch (e) {
+    store.requestDialog({ type: 'confirm', title: 'Image Error', message: 'Could not process that image. Please try a different file.', confirmText: 'OK' })
   }
-  reader.readAsDataURL(file)
+  event.target.value = ''
 }
 </script>
 

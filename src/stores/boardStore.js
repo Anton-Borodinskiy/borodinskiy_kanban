@@ -65,6 +65,12 @@ const migrateData = (data) => {
 
 const generateId = (prefix) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`
 let saveTimeout = null;
+// When true, saveData() is a no-op — used while applying an external change from
+// another tab so we don't echo it straight back to storage.
+let suppressSave = false
+// Guards so the cross-tab listener is bound once and the quota warning isn't spammed.
+let syncBound = false
+let storageErrorShown = false
 
 export const useBoardStore = defineStore('board', {
   state: () => ({
@@ -157,11 +163,46 @@ export const useBoardStore = defineStore('board', {
     },
 
     async saveData() {
-      if (!this.isLoaded) return
+      if (!this.isLoaded || suppressSave) return
       clearTimeout(saveTimeout)
       saveTimeout = setTimeout(async () => {
-        await storage.set('kanban_data', { settings: this.settings, assignees: this.assignees, boards: this.boards, columns: this.columns, tasks: this.tasks })
+        try {
+          await storage.set('kanban_data', { settings: this.settings, assignees: this.assignees, boards: this.boards, columns: this.columns, tasks: this.tasks })
+        } catch (e) {
+          console.error('Failed to save kanban data:', e)
+          this.notifyStorageError()
+        }
       }, 300)
+    },
+
+    // Warn once when storage is full so changes aren't silently dropped.
+    notifyStorageError() {
+      if (storageErrorShown) return
+      storageErrorShown = true
+      this.requestDialog({
+        type: 'confirm',
+        title: 'Storage Full',
+        message: 'Your latest changes could not be saved because the browser storage limit was reached. Remove large board backgrounds or avatars, or export a backup and delete old boards to free space.',
+        confirmText: 'OK'
+      }).then(() => { storageErrorShown = false })
+    },
+
+    // Keep multiple open tabs of the extension in sync: when another tab writes
+    // new data, adopt it here (unless we're mid-edit) instead of clobbering it.
+    setupSync() {
+      if (syncBound || typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.onChanged) return
+      syncBound = true
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== 'local' || !changes.kanban_data) return
+        const newVal = changes.kanban_data.newValue
+        if (!newVal) return
+        const current = JSON.stringify({ settings: this.settings, assignees: this.assignees, boards: this.boards, columns: this.columns, tasks: this.tasks })
+        if (JSON.stringify(newVal) === current) return // our own write / no-op echo
+        if (this.isModalOpen || this.isSettingsOpen || this.dialog.isOpen) return // don't interrupt an edit
+        suppressSave = true
+        try { this.$patch(migrateData(newVal)) } finally { suppressSave = false }
+        this.applyTheme()
+      })
     },
 
     async importWorkspace(jsonData) {

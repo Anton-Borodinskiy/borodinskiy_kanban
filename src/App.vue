@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useBoardStore } from './stores/boardStore'
 import Board from './components/Board.vue'
 import ArchiveView from './components/ArchiveView.vue'
@@ -13,6 +13,7 @@ const store = useBoardStore()
 const searchQuery = ref('')
 const searchScope = ref('current')
 const isFilterOpen = ref(false)
+const searchInput = ref(null)
 
 const searchResults = computed(() => {
   if (searchScope.value === 'all' && searchQuery.value.length > 1) return store.searchTasks(searchQuery.value, 'all')
@@ -36,10 +37,30 @@ const navigateToTask = (task) => {
 const createNewBoard = async () => { const title = await store.requestDialog({ type: 'prompt', title: 'Create New Board', message: 'Enter a title for your new workspace:', confirmText: 'Create' }); if (title) store.addBoard(title) }
 const renameActiveBoard = async () => { const board = store.activeBoard; if (!board) return; const title = await store.requestDialog({ type: 'prompt', title: 'Rename Board', message: 'Enter new title:', confirmText: 'Rename', inputValue: board.title }); if (title) store.renameBoard(board.id, title) }
 
+const isTypingTarget = (el) => !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
+
+const handleKeydown = (e) => {
+  // Esc closes the top-most overlay, even while focused in a field.
+  if (e.key === 'Escape') {
+    if (store.dialog.isOpen) { store.closeDialog(false); return }
+    if (store.isModalOpen) { store.closeModal(); return }
+    if (store.isSettingsOpen) { store.closeSettings(); return }
+    if (isFilterOpen.value) { isFilterOpen.value = false; return }
+    return
+  }
+  // Other shortcuts are ignored while typing or when an overlay is open.
+  if (isTypingTarget(e.target) || store.isModalOpen || store.isSettingsOpen || store.dialog.isOpen) return
+  if (e.key === '/') { e.preventDefault(); searchInput.value?.focus(); return }
+  if (e.key === 'n' || e.key === 'N') { e.preventDefault(); store.openNewTaskModal(); return }
+}
+
 onMounted(() => {
   store.loadData()
   store.$subscribe(() => { if (store.isLoaded) store.saveData() })
+  store.setupSync()
+  window.addEventListener('keydown', handleKeydown)
 })
+onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 </script>
 
 <template>
@@ -88,7 +109,7 @@ onMounted(() => {
 
         <div class="relative flex items-center focus-within:ring-2 focus-within:ring-blue-500 transition-shadow rounded-lg z-30 flex-shrink-0">
           <div class="pl-3 text-gray-400 absolute left-0 z-10"><MagnifyingGlassIcon class="w-4 h-4" /></div>
-          <input v-model="searchQuery" type="text" placeholder="Search..." class="bg-gray-100 dark:bg-gray-700 border-none text-sm py-1.5 pl-9 pr-3 w-32 xl:w-44 2xl:w-56 outline-none rounded-l-lg dark:text-white">
+          <input ref="searchInput" v-model="searchQuery" type="text" placeholder="Search... ( / )" class="bg-gray-100 dark:bg-gray-700 border-none text-sm py-1.5 pl-9 pr-3 w-32 xl:w-44 2xl:w-56 outline-none rounded-l-lg dark:text-white">
           <select v-model="searchScope" class="bg-gray-200 dark:bg-gray-600 border-none text-xs py-1.5 pl-2 pr-6 outline-none cursor-pointer border-l border-gray-300 dark:border-gray-500 text-gray-700 dark:text-white rounded-r-lg">
             <option value="current" class="dark:bg-gray-700">Board</option>
             <option value="all" class="dark:bg-gray-700">Global</option>
