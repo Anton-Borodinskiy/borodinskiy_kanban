@@ -44,19 +44,19 @@ onMounted(() => {
 
 <template>
   <div v-if="store.isLoaded" class="h-screen flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors" :style="store.activeBoard?.background && store.currentView === 'board' ? { background: store.activeBoard.background.startsWith('data:') || store.activeBoard.background.startsWith('http') ? `url(${store.activeBoard.background}) center/cover no-repeat` : store.activeBoard.background } : {}">
-    <header class="flex-shrink-0 bg-white/90 dark:bg-gray-800/90 backdrop-blur border-b border-gray-200 dark:border-gray-700 px-6 py-3 flex flex-wrap gap-y-4 justify-between items-center z-30">
+    <header class="flex-shrink-0 bg-white/90 dark:bg-gray-800/90 backdrop-blur border-b border-gray-200 dark:border-gray-700 px-3 xl:px-4 py-3 flex flex-wrap gap-y-3 justify-between items-center z-30">
 
-      <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2 xl:gap-3 min-w-0">
         <div class="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
           <button @click="store.currentView = 'board'" :class="['p-1.5 rounded transition-colors', store.currentView === 'board' ? 'bg-white dark:bg-gray-600 shadow-sm text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white']" title="Board View"><ViewColumnsIcon class="w-5 h-5" /></button>
           <button @click="store.currentView = 'archive'" :class="['p-1.5 rounded transition-colors', store.currentView === 'archive' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white']" title="Global Archive"><ArchiveBoxIcon class="w-5 h-5" /></button>
           <button @click="store.currentView = 'dashboard'" :class="['p-1.5 rounded transition-colors', store.currentView === 'dashboard' ? 'bg-white dark:bg-gray-600 shadow-sm text-green-600 dark:text-green-400' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white']" title="Analytics Dashboard"><ChartPieIcon class="w-5 h-5" /></button>
         </div>
-        <h1 class="text-xl font-extrabold tracking-tight text-gray-950 dark:text-white ml-2 hidden lg:block">Borodinskiy <span class="text-blue-600 dark:text-blue-400">Kanban</span></h1>
+        <h1 class="text-xl font-extrabold tracking-tight text-gray-950 dark:text-white ml-1 hidden 2xl:block shrink-0">Borodinskiy <span class="text-blue-600 dark:text-blue-400">Kanban</span></h1>
 
-        <div v-if="store.currentView === 'board'" class="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-md pr-1 ml-2 border border-transparent focus-within:border-gray-300 dark:focus-within:border-gray-500 transition-colors overflow-hidden">
+        <div v-if="store.currentView === 'board'" class="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-md pr-1 border border-transparent focus-within:border-gray-300 dark:focus-within:border-gray-500 transition-colors overflow-hidden min-w-0">
           <button @click="store.moveBoard(store.settings.activeBoardId, -1)" class="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 shrink-0"><ChevronLeftIcon class="w-4 h-4" /></button>
-          <select v-model="store.settings.activeBoardId" class="bg-transparent border-none text-sm py-1.5 px-1 w-48 sm:w-64 focus:outline-none focus:ring-0 outline-none cursor-pointer text-gray-900 dark:text-white font-medium truncate flex-1">
+          <select v-model="store.settings.activeBoardId" class="bg-transparent border-none text-sm py-1.5 px-1 w-32 xl:w-44 focus:outline-none focus:ring-0 outline-none cursor-pointer text-gray-900 dark:text-white font-medium truncate flex-1">
             <option v-for="board in store.boards" :key="board.id" :value="board.id" class="dark:bg-gray-800">{{ board.title }}</option>
           </select>
           <button @click="store.moveBoard(store.settings.activeBoardId, 1)" class="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mr-1 shrink-0"><ChevronRightIcon class="w-4 h-4" /></button>
@@ -68,7 +68,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2 min-w-0">
         <div class="relative flex-shrink-0">
           <button @click="isFilterOpen = !isFilterOpen" :class="['flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border', store.assigneeFilterIds.length > 0 ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/30' : 'bg-gray-100 border-transparent text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300']">
             <UsersIcon class="w-4 h-4" /> Filter <span v-if="store.assigneeFilterIds.length" class="ml-1 bg-blue-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">{{store.assigneeFilterIds.length}}</span>
@@ -88,7 +88,7 @@ onMounted(() => {
 
         <div class="relative flex items-center focus-within:ring-2 focus-within:ring-blue-500 transition-shadow rounded-lg z-30 flex-shrink-0">
           <div class="pl-3 text-gray-400 absolute left-0 z-10"><MagnifyingGlassIcon class="w-4 h-4" /></div>
-          <input v-model="searchQuery" type="text" placeholder="Search..." class="bg-gray-100 dark:bg-gray-700 border-none text-sm py-1.5 pl-9 pr-3 w-40 sm:w-48 lg:w-64 outline-none rounded-l-lg dark:text-white">
+          <input v-model="searchQuery" type="text" placeholder="Search..." class="bg-gray-100 dark:bg-gray-700 border-none text-sm py-1.5 pl-9 pr-3 w-32 xl:w-44 2xl:w-56 outline-none rounded-l-lg dark:text-white">
           <select v-model="searchScope" class="bg-gray-200 dark:bg-gray-600 border-none text-xs py-1.5 pl-2 pr-6 outline-none cursor-pointer border-l border-gray-300 dark:border-gray-500 text-gray-700 dark:text-white rounded-r-lg">
             <option value="current" class="dark:bg-gray-700">Board</option>
             <option value="all" class="dark:bg-gray-700">Global</option>

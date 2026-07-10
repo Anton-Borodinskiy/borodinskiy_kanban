@@ -19,7 +19,9 @@ const storage = {
   }
 }
 
-const defaultState = {
+// Fresh default workspace. A factory (not a shared const) so every reset gets
+// its own object references and a current createdAt timestamp.
+const createDefaultState = () => ({
   settings: { theme: 'system', activeBoardId: 'board-1', isCompactMode: false, isSoundEnabled: true },
   assignees: [{ id: 'user-1', name: 'Anton Borodinskiy', initials: 'AB', color: '#3B82F6', avatar: null }],
   boards: [{ id: 'board-1', title: 'Main Project', background: null, createdAt: new Date().toISOString() }],
@@ -28,6 +30,37 @@ const defaultState = {
     { id: 'col-2', boardId: 'board-1', title: 'Done', order: 1, width: 'w-80', isArchive: true, wipLimit: 0 }
   ],
   tasks: []
+})
+
+// Upgrades data saved by any older version to the current shape. This is the
+// single place migrations live, so loading and importing behave identically and
+// no existing tables/tasks are ever lost when the format evolves.
+const migrateData = (data) => {
+  const defaults = createDefaultState()
+  const settings = { ...defaults.settings, ...(data.settings && typeof data.settings === 'object' ? data.settings : {}) }
+  const assignees = Array.isArray(data.assignees) ? data.assignees : defaults.assignees
+  const boards = Array.isArray(data.boards) && data.boards.length ? data.boards : defaults.boards
+  const columns = Array.isArray(data.columns) ? data.columns : []
+  const tasks = Array.isArray(data.tasks) ? data.tasks : []
+
+  tasks.forEach(t => {
+    if (t.assigneeId !== undefined) { t.assigneeIds = t.assigneeId ? [t.assigneeId] : []; delete t.assigneeId }
+    if (!Array.isArray(t.assigneeIds)) t.assigneeIds = []
+    if (!Array.isArray(t.subtasks)) t.subtasks = []
+    if (!Array.isArray(t.links)) t.links = []
+    if (t.color === undefined) t.color = 'default'
+    if (t.isArchived === undefined) t.isArchived = false
+    if (!t.dueDate) t.dueDate = null
+  })
+  columns.forEach(c => {
+    if (c.wipLimit === undefined) c.wipLimit = 0
+    if (c.width === 'w-64' || c.width === 'w-72') c.width = 'w-80'
+  })
+
+  // Keep the active board pointing at something that still exists.
+  if (!boards.some(b => b.id === settings.activeBoardId)) settings.activeBoardId = boards[0]?.id || null
+
+  return { settings, assignees, boards, columns, tasks }
 }
 
 const generateId = (prefix) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`
@@ -107,25 +140,15 @@ export const useBoardStore = defineStore('board', {
     async loadData() {
       try {
         const data = await storage.get('kanban_data')
-        if (data && Array.isArray(data.columns) && Array.isArray(data.tasks)) {
-          data.tasks.forEach(t => {
-            if (t.assigneeId !== undefined) { t.assigneeIds = t.assigneeId ? [t.assigneeId] : []; delete t.assigneeId }
-            if (!t.subtasks) t.subtasks = []
-            if (t.color === undefined) t.color = 'default'
-            if (t.isArchived === undefined) t.isArchived = false
-            if (!t.dueDate) t.dueDate = null
-          })
-          data.columns.forEach(c => {
-            if (c.wipLimit === undefined) c.wipLimit = 0
-            if (c.width === 'w-64' || c.width === 'w-72') c.width = 'w-80'
-          })
-          if (data.settings.isCompactMode === undefined) data.settings.isCompactMode = false
-
-          this.$patch({ settings: data.settings, assignees: data.assignees || [], boards: data.boards, columns: data.columns, tasks: data.tasks })
+        // Only require the core `columns` table to recognise this as our data;
+        // migrateData fills in everything else so partial/old saves survive.
+        if (data && Array.isArray(data.columns)) {
+          this.$patch(migrateData(data))
         } else {
           this.factoryReset(true)
         }
       } catch (e) {
+        console.error('Failed to load kanban data:', e)
         this.factoryReset(true)
       } finally {
         this.applyTheme()
@@ -142,14 +165,10 @@ export const useBoardStore = defineStore('board', {
     },
 
     async importWorkspace(jsonData) {
-      if (jsonData && Array.isArray(jsonData.boards)) {
-        this.$patch({
-          settings: jsonData.settings || this.settings,
-          assignees: jsonData.assignees || [],
-          boards: jsonData.boards,
-          columns: jsonData.columns,
-          tasks: jsonData.tasks
-        })
+      // Accept any backup that carries at least one of the core tables, then run
+      // it through the same migrations as a normal load so old exports keep working.
+      if (jsonData && typeof jsonData === 'object' && (Array.isArray(jsonData.boards) || Array.isArray(jsonData.columns))) {
+        this.$patch(migrateData(jsonData))
         await this.saveData()
         this.applyTheme()
         return true
@@ -159,15 +178,7 @@ export const useBoardStore = defineStore('board', {
 
     async factoryReset(force = false) {
       const resetData = () => {
-        this.$patch({
-          settings: { theme: 'system', activeBoardId: 'board-1', isCompactMode: false },
-          assignees: [], tasks: [], assigneeFilterIds: [], currentView: 'board', isColumnsLocked: true,
-          boards: [{ id: 'board-1', title: 'Main Project', background: null, createdAt: new Date().toISOString() }],
-          columns: [
-            { id: 'col-1', boardId: 'board-1', title: 'To Do', order: 0, width: 'w-80', isArchive: false, wipLimit: 0 },
-            { id: 'col-2', boardId: 'board-1', title: 'Done', order: 1, width: 'w-80', isArchive: true, wipLimit: 0 }
-          ]
-        })
+        this.$patch({ ...createDefaultState(), assigneeFilterIds: [], currentView: 'board', isColumnsLocked: true })
       }
       if (force) { resetData(); return }
       const confirmed = await this.requestDialog({ type: 'confirm', title: 'FACTORY RESET', message: 'Are you absolutely sure? ALL your boards, tasks, and employees will be permanently deleted!', confirmText: 'Yes, Delete Everything', isDanger: true })
@@ -277,10 +288,14 @@ export const useBoardStore = defineStore('board', {
     },
     unarchiveTask(taskId) {
       const task = this.tasks.find(t => t.id === taskId)
-      if (task && this.activeColumns.length > 0) {
-        task.isArchived = false
-        task.columnId = this.activeColumns[0].id
-      }
+      if (!task) return
+      // Prefer restoring into the board the task came from; fall back to the
+      // active board only if that original board no longer exists.
+      let target = this.columns.filter(c => c.boardId === task.originalBoardId).sort((a, b) => a.order - b.order)
+      if (target.length === 0) target = this.activeColumns
+      if (target.length === 0) return
+      task.isArchived = false
+      task.columnId = target[0].id
     },
     archiveAllInColumn(columnId) {
       const col = this.columns.find(c => c.id === columnId)

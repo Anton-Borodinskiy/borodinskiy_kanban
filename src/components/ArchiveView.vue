@@ -41,7 +41,10 @@ const getBoardName = (boardId) => {
 }
 
 const restore = (id) => store.unarchiveTask(id)
-const remove = (id) => { if(confirm('Permanently delete this task?')) store.deleteTask(id) }
+const remove = async (id) => {
+  const confirmed = await store.requestDialog({ type: 'confirm', title: 'Delete Permanently', message: 'Permanently delete this archived task? This cannot be undone.', confirmText: 'Delete', isDanger: true })
+  if (confirmed) store.deleteTask(id)
+}
 </script>
 
 <template>

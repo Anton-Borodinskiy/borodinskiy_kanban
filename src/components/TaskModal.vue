@@ -32,8 +32,19 @@ const toggleAssignee = (id) => {
 
 const addSubtask = () => { store.editingTask.subtasks.push({ title: '', done: false }) }
 const removeSubtask = (idx) => store.editingTask.subtasks.splice(idx, 1)
-const save = () => { if (!store.editingTask.title.trim()) return; store.saveTask(store.editingTask) }
-const remove = () => { if (confirm('Are you sure you want to delete this task?')) store.deleteTask(store.editingTask.id) }
+const save = () => {
+  if (!store.editingTask.title.trim()) return
+  // The label promises a closing comment is required in Done/Archive columns — enforce it.
+  if (isArchiveColumn.value && !store.editingTask.closingComment?.trim()) {
+    store.requestDialog({ type: 'confirm', title: 'Closing Comment Required', message: 'Please add a closing comment before saving a task in a Done/Archive column.', confirmText: 'Got it' })
+    return
+  }
+  store.saveTask(store.editingTask)
+}
+const remove = async () => {
+  const confirmed = await store.requestDialog({ type: 'confirm', title: 'Delete Task', message: 'Are you sure you want to delete this task? This cannot be undone.', confirmText: 'Delete', isDanger: true })
+  if (confirmed) store.deleteTask(store.editingTask.id)
+}
 
 // Логика для добавления ссылок
 const newLinkUrl = ref('')
