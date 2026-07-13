@@ -1,14 +1,12 @@
 <script setup>
 import { useBoardStore } from '../stores/boardStore'
 import { computed, ref, watch } from 'vue'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
-import { TrashIcon, PlusIcon, LinkIcon } from '@heroicons/vue/24/outline' // Добавь LinkIcon
+import { VueDraggable } from 'vue-draggable-plus'
+import MarkdownEditor from './MarkdownEditor.vue'
+import { TrashIcon, PlusIcon, LinkIcon, Bars2Icon } from '@heroicons/vue/24/outline'
 
 
 const store = useBoardStore()
-const descTab = ref('edit')
-const commentTab = ref('edit')
 const customColor = ref('#ffffff')
 
 watch(() => store.editingTask?.color, (newVal) => {
@@ -20,8 +18,6 @@ const isArchiveColumn = computed(() => {
   const column = store.columns.find(c => c.id === store.editingTask.columnId)
   return column?.isArchive || false
 })
-
-const renderMarkdown = (text) => text ? DOMPurify.sanitize(marked.parse(text)) : ''
 
 const toggleAssignee = (id) => {
   if (!store.editingTask.assigneeIds) store.editingTask.assigneeIds = []
@@ -118,15 +114,8 @@ const handleCustomColor = (e) => { store.editingTask.color = e.target.value }
         </div>
 
         <div>
-          <div class="flex justify-between items-end mb-1">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
-            <div class="flex text-xs border border-gray-300 dark:border-gray-600 rounded overflow-hidden">
-              <button @click="descTab = 'edit'" :class="['px-3 py-1', descTab === 'edit' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700']">Edit</button>
-              <button @click="descTab = 'preview'" :class="['px-3 py-1', descTab === 'preview' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700']">Preview</button>
-            </div>
-          </div>
-          <textarea v-if="descTab === 'edit'" v-model="store.editingTask.description" rows="5" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white p-2 border resize-y outline-none focus:ring-2 focus:ring-blue-500" placeholder="Add details..."></textarea>
-          <div v-else class="prose prose-sm dark:prose-invert max-w-none p-3 border border-dashed border-gray-300 dark:border-gray-600 rounded-md min-h-[120px] bg-gray-50 dark:bg-black/20" v-html="renderMarkdown(store.editingTask.description)"></div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+          <MarkdownEditor v-model="store.editingTask.description" :rows="5" placeholder="Add details..." min-height="120px" />
         </div>
 
         <div>
@@ -134,13 +123,14 @@ const handleCustomColor = (e) => { store.editingTask.color = e.target.value }
              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Checklist</label>
              <button @click="addSubtask" class="text-xs text-blue-600 hover:underline flex items-center gap-1"><PlusIcon class="w-3 h-3"/> Add Item</button>
            </div>
-           <div class="space-y-2">
-             <div v-for="(subtask, idx) in store.editingTask.subtasks" :key="idx" class="flex items-center gap-2">
+           <VueDraggable v-model="store.editingTask.subtasks" handle=".subtask-handle" :animation="150" class="space-y-2">
+             <div v-for="(subtask, idx) in store.editingTask.subtasks" :key="idx" class="flex items-center gap-2 group/sub">
+               <button type="button" class="subtask-handle cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400 shrink-0" title="Drag to reorder"><Bars2Icon class="w-4 h-4" /></button>
                <input type="checkbox" v-model="subtask.done" class="rounded text-blue-600 w-4 h-4 cursor-pointer border-gray-300 dark:border-gray-600 dark:bg-gray-700">
                <input type="text" v-model="subtask.title" :class="['flex-1 text-sm border-b border-transparent focus:border-gray-300 dark:focus:border-gray-600 bg-transparent outline-none transition-all', subtask.done ? 'line-through text-gray-400' : 'text-gray-800 dark:text-gray-200']" placeholder="To do item...">
-               <button @click="removeSubtask(idx)" class="text-gray-400 hover:text-red-500"><TrashIcon class="w-4 h-4" /></button>
+               <button @click="removeSubtask(idx)" class="text-gray-400 hover:text-red-500 shrink-0"><TrashIcon class="w-4 h-4" /></button>
              </div>
-           </div>
+           </VueDraggable>
         </div>
         <div>
            <div class="flex justify-between items-center mb-2">
@@ -160,15 +150,8 @@ const handleCustomColor = (e) => { store.editingTask.color = e.target.value }
            </div>
         </div>
         <div :class="{'bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800': isArchiveColumn}">
-          <div class="flex justify-between items-end mb-1">
-            <label class="block text-sm font-medium" :class="isArchiveColumn ? 'text-green-800 dark:text-green-300' : 'text-gray-700 dark:text-gray-300'">Closing Comment <span v-if="isArchiveColumn">(Required)</span></label>
-            <div class="flex text-xs border border-gray-300 dark:border-gray-600 rounded overflow-hidden">
-              <button @click="commentTab = 'edit'" :class="['px-3 py-1', commentTab === 'edit' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700']">Edit</button>
-              <button @click="commentTab = 'preview'" :class="['px-3 py-1', commentTab === 'preview' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700']">Preview</button>
-            </div>
-          </div>
-          <textarea v-if="commentTab === 'edit'" v-model="store.editingTask.closingComment" rows="2" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white p-2 border resize-y outline-none focus:ring-2 focus:ring-blue-500" placeholder="Final notes..."></textarea>
-          <div v-else class="prose prose-sm dark:prose-invert max-w-none p-3 border border-dashed border-gray-300 dark:border-gray-600 rounded-md min-h-[50px] bg-white/50 dark:bg-black/20" v-html="renderMarkdown(store.editingTask.closingComment)"></div>
+          <label class="block text-sm font-medium mb-1" :class="isArchiveColumn ? 'text-green-800 dark:text-green-300' : 'text-gray-700 dark:text-gray-300'">Closing Comment <span v-if="isArchiveColumn">(Required)</span></label>
+          <MarkdownEditor v-model="store.editingTask.closingComment" :rows="3" placeholder="Final notes..." min-height="60px" />
         </div>
       </div>
 

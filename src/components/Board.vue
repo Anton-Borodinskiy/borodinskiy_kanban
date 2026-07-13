@@ -1,8 +1,7 @@
 <script setup>
 import { computed, ref, reactive, watch } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import { renderMarkdown } from '../utils/markdown'
 import { useBoardStore } from '../stores/boardStore'
 import { PlusIcon, ArchiveBoxIcon, ListBulletIcon, ChevronLeftIcon, ChevronRightIcon, ArrowDownOnSquareStackIcon, CalendarDaysIcon, ChevronDownIcon, ChevronUpIcon, TrashIcon, LinkIcon  } from '@heroicons/vue/24/outline'
 
@@ -13,10 +12,6 @@ const editingColId = ref(null)
 const expandedSubtasks = reactive({})
 const expandedLinks = reactive({})
 
-DOMPurify.addHook('afterSanitizeAttributes', function(node) {
-  if (node.tagName === 'A') { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
-});
-const renderMarkdown = (text) => text ? DOMPurify.sanitize(marked.parse(text)) : ''
 const getAssignee = (id) => store.assignees.find(a => a.id === id)
 
 const colorClasses = {

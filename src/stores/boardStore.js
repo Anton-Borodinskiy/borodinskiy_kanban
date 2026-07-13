@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { pushGist, pullGist } from '../utils/cloudSync'
 
 const storage = {
   async get(key) {
@@ -71,6 +72,8 @@ let suppressSave = false
 // Guards so the cross-tab listener is bound once and the quota warning isn't spammed.
 let syncBound = false
 let storageErrorShown = false
+// Debounce for auto-pushing to the cloud after local changes.
+let cloudPushTimeout = null
 
 export const useBoardStore = defineStore('board', {
   state: () => ({
@@ -88,7 +91,10 @@ export const useBoardStore = defineStore('board', {
     currentView: 'board',
     assigneeFilterIds: [],
     isColumnsLocked: true,
-    isDraggingTask: false
+    isDraggingTask: false,
+    // Cloud sync config — stored separately from the workspace so the token is
+    // never included in exported/imported backups.
+    sync: { token: '', gistId: '', autoPush: false, lastSyncedAt: null, status: '', busy: false }
   }),
 
   getters: {
@@ -157,6 +163,7 @@ export const useBoardStore = defineStore('board', {
         console.error('Failed to load kanban data:', e)
         this.factoryReset(true)
       } finally {
+        await this.loadSync()
         this.applyTheme()
         this.isLoaded = true
       }
@@ -168,6 +175,7 @@ export const useBoardStore = defineStore('board', {
       saveTimeout = setTimeout(async () => {
         try {
           await storage.set('kanban_data', { settings: this.settings, assignees: this.assignees, boards: this.boards, columns: this.columns, tasks: this.tasks })
+          this.maybeAutoPush()
         } catch (e) {
           console.error('Failed to save kanban data:', e)
           this.notifyStorageError()
@@ -203,6 +211,73 @@ export const useBoardStore = defineStore('board', {
         try { this.$patch(migrateData(newVal)) } finally { suppressSave = false }
         this.applyTheme()
       })
+    },
+
+    // --- CLOUD SYNC (GitHub Gist) ---
+    async loadSync() {
+      try {
+        const s = await storage.get('kanban_sync')
+        if (s && typeof s === 'object') {
+          this.sync = { ...this.sync, token: s.token || '', gistId: s.gistId || '', autoPush: !!s.autoPush, lastSyncedAt: s.lastSyncedAt || null }
+        }
+      } catch (e) { console.error('Failed to load sync config:', e) }
+    },
+    async saveSyncConfig() {
+      await storage.set('kanban_sync', {
+        token: this.sync.token, gistId: this.sync.gistId, autoPush: this.sync.autoPush, lastSyncedAt: this.sync.lastSyncedAt
+      })
+    },
+    async cloudPush() {
+      if (this.sync.busy) return false
+      this.sync.busy = true
+      this.sync.status = this.sync.gistId ? 'Uploading…' : 'Creating cloud backup…'
+      try {
+        const data = { settings: this.settings, assignees: this.assignees, boards: this.boards, columns: this.columns, tasks: this.tasks }
+        const id = await pushGist(this.sync.token.trim(), this.sync.gistId.trim(), data)
+        this.sync.gistId = id
+        this.sync.lastSyncedAt = new Date().toISOString()
+        this.sync.status = 'Uploaded ✓'
+        await this.saveSyncConfig()
+        return true
+      } catch (e) {
+        this.sync.status = 'Error: ' + e.message
+        return false
+      } finally { this.sync.busy = false }
+    },
+    async cloudPull() {
+      if (this.sync.busy) return false
+      const confirmed = await this.requestDialog({ type: 'confirm', title: 'Pull from Cloud', message: 'This replaces your current local workspace with the cloud backup. Continue?', confirmText: 'Pull & Overwrite', isDanger: true })
+      if (!confirmed) return false
+      this.sync.busy = true
+      this.sync.status = 'Downloading…'
+      try {
+        const data = await pullGist(this.sync.token.trim(), this.sync.gistId.trim())
+        if (!data || !Array.isArray(data.columns)) throw new Error('Cloud backup is not a valid workspace.')
+        this.$patch(migrateData(data))
+        this.applyTheme()
+        await this.saveData()
+        this.sync.lastSyncedAt = new Date().toISOString()
+        this.sync.status = 'Downloaded ✓'
+        await this.saveSyncConfig()
+        return true
+      } catch (e) {
+        this.sync.status = 'Error: ' + e.message
+        return false
+      } finally { this.sync.busy = false }
+    },
+    async setAutoPush(enabled) {
+      this.sync.autoPush = enabled
+      await this.saveSyncConfig()
+    },
+    async disconnectCloud() {
+      this.sync = { token: '', gistId: '', autoPush: false, lastSyncedAt: null, status: '', busy: false }
+      await this.saveSyncConfig()
+    },
+    // Debounced background upload after local edits (only when enabled & connected).
+    maybeAutoPush() {
+      if (!this.sync.autoPush || !this.sync.token || !this.sync.gistId || this.sync.busy) return
+      clearTimeout(cloudPushTimeout)
+      cloudPushTimeout = setTimeout(() => { this.cloudPush() }, 3000)
     },
 
     async importWorkspace(jsonData) {

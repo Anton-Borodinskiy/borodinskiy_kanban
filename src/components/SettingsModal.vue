@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useBoardStore } from '../stores/boardStore'
 import AssigneeManager from './AssigneeManager.vue'
-import { ArrowDownTrayIcon, ArrowUpTrayIcon, ExclamationTriangleIcon, PhotoIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { ArrowDownTrayIcon, ArrowUpTrayIcon, ExclamationTriangleIcon, PhotoIcon, XMarkIcon, CloudArrowUpIcon, CloudArrowDownIcon } from '@heroicons/vue/24/outline'
 import { fileToDownscaledDataURL } from '../utils/image'
 
 const store = useBoardStore()
@@ -88,6 +88,7 @@ const handleBgUpload = async (event) => {
           <button @click="activeTab = 'team'" :class="['text-lg font-semibold pb-1 border-b-2 transition-colors', activeTab === 'team' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']">Team & Assignees</button>
           <button @click="activeTab = 'boards'" :class="['text-lg font-semibold pb-1 border-b-2 transition-colors', activeTab === 'boards' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']">Board Backgrounds</button>
           <button @click="activeTab = 'data'" :class="['text-lg font-semibold pb-1 border-b-2 transition-colors', activeTab === 'data' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']">Data (Export/Import)</button>
+          <button @click="activeTab = 'cloud'" :class="['text-lg font-semibold pb-1 border-b-2 transition-colors', activeTab === 'cloud' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']">Cloud Sync</button>
         </div>
         <button @click="store.closeSettings" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl leading-none">&times;</button>
       </div>
@@ -147,6 +148,46 @@ const handleBgUpload = async (event) => {
             <h4 class="font-bold text-red-900 dark:text-red-300 flex items-center gap-2 mb-2"><ExclamationTriangleIcon class="w-5 h-5" /> Danger Zone: Factory Reset</h4>
             <p class="text-sm text-red-700 dark:text-red-400 mb-4">This action will permanently delete all boards, tasks, archives, and settings from your browser's local storage. This action cannot be undone.</p>
             <button @click="store.factoryReset()" class="bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 px-5 rounded shadow transition-colors">Delete All Data</button>
+          </div>
+        </div>
+
+        <div v-if="activeTab === 'cloud'" class="space-y-5">
+          <div class="bg-indigo-50 dark:bg-indigo-900/20 p-5 rounded-lg border border-indigo-200 dark:border-indigo-800">
+            <h4 class="font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-2 mb-2"><CloudArrowUpIcon class="w-5 h-5" /> Sync via private GitHub Gist</h4>
+            <p class="text-sm text-indigo-700 dark:text-indigo-400 mb-3">Keep your workspace backed up in the cloud and share it across devices — no server required. It stores everything in a single <strong>private</strong> GitHub Gist.</p>
+            <ol class="text-sm text-indigo-700 dark:text-indigo-400 list-decimal list-inside space-y-1 mb-1">
+              <li>Create a token at <a href="https://github.com/settings/tokens/new?scopes=gist&description=Borodinskiy%20Kanban" target="_blank" class="underline font-medium">github.com/settings/tokens</a> with only the <code class="px-1 bg-indigo-100 dark:bg-indigo-800/50 rounded">gist</code> scope.</li>
+              <li>Paste it below and click <strong>Upload</strong> to create your cloud backup.</li>
+              <li>On another device, paste the same token and the Gist ID, then click <strong>Download</strong>.</li>
+            </ol>
+          </div>
+
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-bold text-gray-500 uppercase mb-1">GitHub Token (gist scope)</label>
+              <input v-model="store.sync.token" type="password" placeholder="ghp_…" autocomplete="off" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white p-2 border text-sm outline-none focus:border-blue-500">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Gist ID <span class="normal-case font-normal text-gray-400">(auto-filled after first upload)</span></label>
+              <input v-model="store.sync.gistId" type="text" placeholder="Created automatically, or paste to connect an existing backup" class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white p-2 border text-sm outline-none focus:border-blue-500 font-mono">
+            </div>
+
+            <div class="flex flex-wrap gap-3 pt-1">
+              <button @click="store.cloudPush()" :disabled="!store.sync.token || store.sync.busy" class="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium py-2 px-5 rounded shadow transition-colors flex items-center gap-2"><CloudArrowUpIcon class="w-4 h-4" /> Upload to Cloud</button>
+              <button @click="store.cloudPull()" :disabled="!store.sync.token || !store.sync.gistId || store.sync.busy" class="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 text-gray-700 dark:text-gray-200 text-sm font-medium py-2 px-5 rounded shadow-sm transition-colors flex items-center gap-2"><CloudArrowDownIcon class="w-4 h-4" /> Download from Cloud</button>
+              <button v-if="store.sync.gistId" @click="store.disconnectCloud()" class="text-sm text-red-500 hover:text-red-700 font-medium py-2 px-3">Disconnect</button>
+            </div>
+
+            <label class="flex items-center gap-2 cursor-pointer pt-1">
+              <input type="checkbox" :checked="store.sync.autoPush" @change="store.setAutoPush($event.target.checked)" class="rounded text-blue-600 border-gray-300 dark:bg-gray-700 dark:border-gray-600">
+              <span class="text-sm text-gray-700 dark:text-gray-300">Auto-upload to cloud after every change</span>
+            </label>
+
+            <div class="text-xs text-gray-500 dark:text-gray-400 pt-1 space-y-1">
+              <p v-if="store.sync.status"><span class="font-semibold">Status:</span> {{ store.sync.status }}</p>
+              <p v-if="store.sync.lastSyncedAt"><span class="font-semibold">Last synced:</span> {{ new Date(store.sync.lastSyncedAt).toLocaleString() }}</p>
+              <p class="text-gray-400 dark:text-gray-500">⚠️ The token is stored locally in this browser only. Downloading overwrites local data with the cloud copy.</p>
+            </div>
           </div>
         </div>
       </div>
