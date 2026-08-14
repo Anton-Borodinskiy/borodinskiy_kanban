@@ -43,7 +43,7 @@ const handleKeydown = (e) => {
   // Esc closes the top-most overlay, even while focused in a field.
   if (e.key === 'Escape') {
     if (store.dialog.isOpen) { store.closeDialog(false); return }
-    if (store.isModalOpen) { store.closeModal(); return }
+    if (store.isModalOpen) { store.attemptCloseModal(); return }
     if (store.isSettingsOpen) { store.closeSettings(); return }
     if (isFilterOpen.value) { isFilterOpen.value = false; return }
     return

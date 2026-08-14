@@ -85,6 +85,8 @@ export const useBoardStore = defineStore('board', {
     isLoaded: false,
     isModalOpen: false,
     editingTask: null,
+    // Serialized snapshot of the task as opened, to detect unsaved edits on close.
+    editingTaskSnapshot: null,
     dialog: { isOpen: false, type: 'confirm', title: '', message: '', confirmText: 'OK', isDanger: false, inputValue: '', resolve: null },
     isSettingsOpen: false,
     highlightedTaskId: null,
@@ -433,6 +435,7 @@ export const useBoardStore = defineStore('board', {
         isNew: true, isArchived: false
       }
       this.isModalOpen = true
+      this.editingTaskSnapshot = JSON.stringify(this.editingTask)
     },
     openEditTaskModal(task) {
       this.editingTask = JSON.parse(JSON.stringify(task))
@@ -440,10 +443,32 @@ export const useBoardStore = defineStore('board', {
       if(!this.editingTask.subtasks) this.editingTask.subtasks = []
       if(!this.editingTask.links) this.editingTask.links = [] // <-- Добавили поддержку ссылок для старых задач
       this.isModalOpen = true
+      // Snapshot AFTER defaults are applied, so simply opening a task isn't "dirty".
+      this.editingTaskSnapshot = JSON.stringify(this.editingTask)
+    },
+    // True when the open task has edits that differ from how it was opened.
+    isEditingDirty() {
+      if (!this.isModalOpen || !this.editingTask) return false
+      return JSON.stringify(this.editingTask) !== this.editingTaskSnapshot
+    },
+    // Close entry point that warns before throwing away unsaved edits.
+    async attemptCloseModal() {
+      if (this.isEditingDirty()) {
+        const discard = await this.requestDialog({
+          type: 'confirm',
+          title: 'Discard changes?',
+          message: 'You have unsaved changes in this task. Close without saving?',
+          confirmText: 'Discard',
+          isDanger: true
+        })
+        if (!discard) return
+      }
+      this.closeModal()
     },
     closeModal() {
       this.isModalOpen = false
       this.editingTask = null
+      this.editingTaskSnapshot = null
     },
     saveTask(taskData) {
       if (taskData.isNew) {

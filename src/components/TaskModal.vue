@@ -69,12 +69,12 @@ const handleCustomColor = (e) => { store.editingTask.color = e.target.value }
 </script>
 
 <template>
-  <div v-if="store.isModalOpen && store.editingTask" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @mousedown.self="store.closeModal">
+  <div v-if="store.isModalOpen && store.editingTask" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @mousedown.self="store.attemptCloseModal">
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
 
       <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50 rounded-t-xl">
         <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ store.editingTask.isNew ? 'Create New Task' : 'Edit Task' }}</h3>
-        <button @click="store.closeModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl leading-none">&times;</button>
+        <button @click="store.attemptCloseModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl leading-none">&times;</button>
       </div>
 
       <div class="p-6 overflow-y-auto flex-1 space-y-5">
@@ -159,7 +159,7 @@ const handleCustomColor = (e) => { store.editingTask.color = e.target.value }
         <button v-if="!store.editingTask.isNew" @click="remove" class="text-red-600 hover:text-red-700 font-medium text-sm px-4 py-2">Delete</button>
         <div v-else></div>
         <div class="flex gap-3">
-          <button @click="store.closeModal" class="text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 font-medium text-sm px-4 py-2 rounded-md transition-colors">Cancel</button>
+          <button @click="store.attemptCloseModal" class="text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 font-medium text-sm px-4 py-2 rounded-md transition-colors">Cancel</button>
           <button @click="save" class="bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-6 py-2 rounded-md shadow-sm disabled:opacity-50" :disabled="!store.editingTask.title.trim()">Save</button>
         </div>
       </div>
