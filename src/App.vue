@@ -54,13 +54,25 @@ const handleKeydown = (e) => {
   if (e.key === 'n' || e.key === 'N') { e.preventDefault(); store.openNewTaskModal(); return }
 }
 
+// Guard the browser tab itself: warn on close/reload while a card has unsaved edits.
+const handleBeforeUnload = (e) => {
+  if (store.isEditingDirty()) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
+
 onMounted(() => {
   store.loadData()
   store.$subscribe(() => { if (store.isLoaded) store.saveData() })
   store.setupSync()
   window.addEventListener('keydown', handleKeydown)
+  window.addEventListener('beforeunload', handleBeforeUnload)
 })
-onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+})
 </script>
 
 <template>
