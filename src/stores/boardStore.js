@@ -104,6 +104,7 @@ export const useBoardStore = defineStore('board', {
     editingTaskSnapshot: null,
     dialog: { isOpen: false, type: 'confirm', title: '', message: '', confirmText: 'OK', isDanger: false, inputValue: '', resolve: null },
     isSettingsOpen: false,
+    settingsTab: 'team',
     highlightedTaskId: null,
     currentView: 'board',
     assigneeFilterIds: [],
@@ -151,7 +152,10 @@ export const useBoardStore = defineStore('board', {
       this.dialog.isOpen = false
       this.dialog.resolve = null
     },
-    openSettings() { this.isSettingsOpen = true },
+    openSettings(tab = null) {
+      if (tab) this.settingsTab = tab
+      this.isSettingsOpen = true
+    },
     closeSettings() { this.isSettingsOpen = false },
     toggleSound() {
       this.settings.isSoundEnabled = !this.settings.isSoundEnabled
@@ -341,6 +345,7 @@ export const useBoardStore = defineStore('board', {
       this.sync.busy = true
       this.sync.status = 'Downloading…'
       try {
+        await this.saveSnapshot('before cloud download')
         const res = await pullGist(this.sync.token.trim(), this.sync.gistId.trim())
         if (!res.data || !Array.isArray(res.data.columns)) throw new Error('Cloud backup is not a valid workspace.')
         this.$patch(migrateData(res.data))
@@ -415,6 +420,7 @@ export const useBoardStore = defineStore('board', {
       if (force) { resetData(); return }
       const confirmed = await this.requestDialog({ type: 'confirm', title: 'FACTORY RESET', message: 'Are you absolutely sure? ALL your boards, tasks, and employees will be permanently deleted!', confirmText: 'Yes, Delete Everything', isDanger: true })
       if (confirmed) {
+        await this.saveSnapshot('before factory reset')
         resetData()
         await this.saveData()
         this.applyTheme()
@@ -681,6 +687,15 @@ export const useBoardStore = defineStore('board', {
         if (i !== -1) this.tasks[i] = taskData
       }
       this.closeModal()
+    },
+    // Bulk delete with a single undo entry — deleting archived tasks one by one
+    // meant one confirm dialog per task.
+    deleteTasks(taskIds) {
+      const ids = new Set(taskIds)
+      const removed = this.tasks.filter(t => ids.has(t.id))
+      if (removed.length === 0) return
+      this.tasks = this.tasks.filter(t => !ids.has(t.id))
+      this.pushUndo(`${removed.length} tasks deleted`, () => { this.tasks.push(...removed) })
     },
     toggleSubtask(taskId, subtaskIdx) {
       const task = this.tasks.find(t => t.id === taskId)

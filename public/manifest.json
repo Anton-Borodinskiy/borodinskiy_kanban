@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Borodinskiy Kanban",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "description": "A beautiful, customizable Kanban board right in your browser. Organize tasks, manage your team, and get things done effortlessly.",
   "action": {
     "default_title": "Open Borodinskiy Kanban",
@@ -18,7 +18,8 @@
   },
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "https://api.github.com/*"

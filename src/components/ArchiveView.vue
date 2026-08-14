@@ -45,9 +45,44 @@ const getBoardName = (boardId) => {
   return board ? board.title : 'Board deleted'
 }
 
+// --- bulk selection ---
+const selected = ref(new Set())
+const isSelected = (id) => selected.value.has(id)
+const toggleSelect = (id) => {
+  const next = new Set(selected.value)
+  next.has(id) ? next.delete(id) : next.add(id)
+  selected.value = next
+}
+const allOnPageSelected = computed(() => paginatedTasks.value.length > 0 && paginatedTasks.value.every(t => selected.value.has(t.id)))
+const toggleSelectPage = () => {
+  const next = new Set(selected.value)
+  if (allOnPageSelected.value) paginatedTasks.value.forEach(t => next.delete(t.id))
+  else paginatedTasks.value.forEach(t => next.add(t.id))
+  selected.value = next
+}
+const clearSelection = () => { selected.value = new Set() }
+watch([search, sortBy], clearSelection)
+
+const restoreSelected = async () => {
+  const ids = [...selected.value]
+  if (!ids.length) return
+  const ok = await store.requestDialog({ type: 'confirm', title: 'Restore selected', message: `Restore ${ids.length} task(s) to their original boards?`, confirmText: 'Restore' })
+  if (!ok) return
+  ids.forEach(id => store.unarchiveTask(id))
+  clearSelection()
+}
+const deleteSelected = async () => {
+  const ids = [...selected.value]
+  if (!ids.length) return
+  const ok = await store.requestDialog({ type: 'confirm', title: 'Delete selected', message: `Permanently delete ${ids.length} archived task(s)? You can undo this for a few seconds.`, confirmText: 'Delete', isDanger: true })
+  if (!ok) return
+  store.deleteTasks(ids)
+  clearSelection()
+}
+
 const restore = (id) => store.unarchiveTask(id)
 const remove = async (id) => {
-  const confirmed = await store.requestDialog({ type: 'confirm', title: 'Delete Permanently', message: 'Permanently delete this archived task? This cannot be undone.', confirmText: 'Delete', isDanger: true })
+  const confirmed = await store.requestDialog({ type: 'confirm', title: 'Delete Permanently', message: 'Permanently delete this archived task? You can undo this for a few seconds.', confirmText: 'Delete', isDanger: true })
   if (confirmed) store.deleteTask(id)
 }
 </script>
@@ -77,10 +112,18 @@ const remove = async (id) => {
       </div>
     </div>
 
+    <div v-if="selected.size > 0" class="mb-3 flex items-center gap-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-2">
+      <span class="text-sm font-medium text-blue-800 dark:text-blue-300">{{ selected.size }} selected</span>
+      <button @click="restoreSelected" class="text-sm font-medium text-blue-600 hover:underline">Restore selected</button>
+      <button @click="deleteSelected" class="text-sm font-medium text-red-600 hover:underline">Delete selected</button>
+      <button @click="clearSelection" class="ml-auto text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Clear</button>
+    </div>
+
     <div class="flex-1 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm flex flex-col">
       <table class="w-full text-left border-collapse">
         <thead class="sticky top-0 bg-gray-50 dark:bg-gray-900/90 backdrop-blur z-10 shadow-sm">
           <tr class="border-b border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300">
+            <th class="p-4 w-10"><input type="checkbox" :checked="allOnPageSelected" @change="toggleSelectPage" class="rounded text-blue-600 border-gray-300 dark:bg-gray-700 dark:border-gray-600" aria-label="Select all on this page"></th>
             <th class="p-4 w-1/3">Task Title</th>
             <th class="p-4 w-1/6">Origin Board</th>
             <th class="p-4 w-1/6">Date Archived</th>
@@ -90,6 +133,7 @@ const remove = async (id) => {
         </thead>
         <tbody>
           <tr v-for="task in paginatedTasks" :key="task.id" class="border-b last:border-0 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700/80 transition-colors">
+            <td class="p-4"><input type="checkbox" :checked="isSelected(task.id)" @change="toggleSelect(task.id)" class="rounded text-blue-600 border-gray-300 dark:bg-gray-700 dark:border-gray-600" :aria-label="`Select ${task.title}`"></td>
             <td class="p-4 font-medium text-gray-900 dark:text-white cursor-pointer hover:text-blue-600" @click="store.openEditTaskModal(task)">{{ task.title }}</td>
             <td class="p-4 text-sm text-gray-500 dark:text-gray-400">
               <span :class="['px-2 py-1 rounded text-xs font-semibold', getBoardName(task.originalBoardId) === 'Board deleted' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300']">
@@ -104,7 +148,7 @@ const remove = async (id) => {
             </td>
           </tr>
           <tr v-if="paginatedTasks.length === 0">
-            <td colspan="5" class="p-8 text-center text-gray-500 dark:text-gray-400">No archived tasks found.</td>
+            <td colspan="6" class="p-8 text-center text-gray-500 dark:text-gray-400">No archived tasks found.</td>
           </tr>
         </tbody>
       </table>

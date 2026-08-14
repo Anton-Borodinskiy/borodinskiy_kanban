@@ -1,13 +1,39 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useBoardStore } from '../stores/boardStore'
 import AssigneeManager from './AssigneeManager.vue'
-import { ArrowDownTrayIcon, ArrowUpTrayIcon, ExclamationTriangleIcon, PhotoIcon, XMarkIcon, CloudArrowUpIcon, CloudArrowDownIcon } from '@heroicons/vue/24/outline'
+import { ArrowDownTrayIcon, ArrowUpTrayIcon, ExclamationTriangleIcon, PhotoIcon, XMarkIcon, CloudArrowUpIcon, CloudArrowDownIcon, ClockIcon } from '@heroicons/vue/24/outline'
 import { fileToDownscaledDataURL } from '../utils/image'
 
 const store = useBoardStore()
-const activeTab = ref('team')
+const activeTab = computed({
+  get: () => store.settingsTab,
+  set: (v) => { store.settingsTab = v }
+})
 const fileInput = ref(null)
+const snapshots = ref([])
+
+const refreshSnapshots = async () => { snapshots.value = await store.listSnapshots() }
+// Keep the list current whenever the Data tab is shown.
+watch(() => [store.isSettingsOpen, activeTab.value], ([open, tab]) => {
+  if (open && tab === 'data') refreshSnapshots()
+}, { immediate: true })
+
+const restore = async (index) => {
+  const s = snapshots.value[index]
+  const ok = await store.requestDialog({
+    type: 'confirm',
+    title: 'Restore this point?',
+    message: `Replace your current workspace with the snapshot from ${new Date(s.at).toLocaleString()} (${s.counts.boards} boards, ${s.counts.columns} columns, ${s.counts.tasks} tasks)? Your current state is snapshotted first.`,
+    confirmText: 'Restore',
+    isDanger: true
+  })
+  if (!ok) return
+  const done = await store.restoreSnapshot(index)
+  await refreshSnapshots()
+  store.requestDialog({ type: 'confirm', title: done ? 'Restored' : 'Restore failed', message: done ? 'Your workspace was restored from the snapshot.' : 'That snapshot could not be read.', confirmText: 'OK', isDanger: !done })
+}
+const formatSnapshotDate = (iso) => new Date(iso).toLocaleString()
 
 const exportData = () => {
   // ИСПРАВЛЕНИЕ: Глубокая очистка данных от Vue Proxy перед скачиванием
@@ -49,6 +75,23 @@ const handleImport = (event) => {
 
     // 2. Пытаемся применить структуру к нашему Канбану
     try {
+      // Confirm with real counts first — importing replaces everything, and the
+      // file picker used to fire this off with no confirmation at all.
+      const incoming = store.describeWorkspace(json)
+      if (!incoming) {
+        store.requestDialog({ type: 'confirm', title: 'Structure Error', message: 'JSON format is valid, but it does not match the Kanban workspace structure.', confirmText: 'Close', isDanger: true })
+        event.target.value = ''
+        return
+      }
+      const ok = await store.requestDialog({
+        type: 'confirm',
+        title: 'Replace your workspace?',
+        message: `Current: ${store.boards.length} boards, ${store.columns.length} columns, ${store.tasks.length} tasks.\nImporting: ${incoming.boards} boards, ${incoming.columns} columns, ${incoming.tasks} tasks.\n\nThis replaces everything. A snapshot is saved first so you can undo it from "Restore points".`,
+        confirmText: 'Replace',
+        isDanger: true
+      })
+      if (!ok) { event.target.value = ''; return }
+
       const success = await store.importWorkspace(json)
       if (success) {
         store.requestDialog({ type: 'confirm', title: 'Success', message: 'Workspace imported successfully!', confirmText: 'Great' });
@@ -142,6 +185,21 @@ const handleBgUpload = async (event) => {
             <p class="text-sm text-yellow-800 dark:text-yellow-500 font-bold mb-4">⚠️ Warning: Importing will completely overwrite your current local data!</p>
             <input type="file" accept=".json" class="hidden" ref="fileInput" @change="handleImport">
             <button @click="fileInput.click()" class="bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-medium py-2 px-5 rounded shadow transition-colors">Select JSON to Import...</button>
+          </div>
+
+          <div class="bg-green-50 dark:bg-green-900/20 p-5 rounded-lg border border-green-200 dark:border-green-800">
+            <h4 class="font-bold text-green-900 dark:text-green-300 flex items-center gap-2 mb-2"><ClockIcon class="w-5 h-5" /> Restore Points</h4>
+            <p class="text-sm text-green-700 dark:text-green-400 mb-3">Automatic local snapshots, taken hourly while you work and always before an import, cloud download, or factory reset. The 10 most recent are kept.</p>
+            <div v-if="snapshots.length === 0" class="text-sm text-green-700/70 dark:text-green-400/70 italic">No snapshots yet — one is taken automatically as you work.</div>
+            <div v-else class="space-y-2 max-h-52 overflow-y-auto">
+              <div v-for="(snap, idx) in snapshots" :key="snap.at" class="flex items-center justify-between gap-3 bg-white/70 dark:bg-black/20 border border-green-200 dark:border-green-800 rounded px-3 py-2">
+                <div class="min-w-0">
+                  <div class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ formatSnapshotDate(snap.at) }}</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ snap.counts.boards }} boards · {{ snap.counts.columns }} columns · {{ snap.counts.tasks }} tasks<span v-if="snap.reason && snap.reason !== 'auto'"> · {{ snap.reason }}</span></div>
+                </div>
+                <button @click="restore(idx)" class="shrink-0 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-xs font-medium py-1.5 px-3 rounded transition-colors">Restore</button>
+              </div>
+            </div>
           </div>
 
           <div class="bg-red-50 dark:bg-red-900/20 p-5 rounded-lg border border-red-200 dark:border-red-800 mt-6">
