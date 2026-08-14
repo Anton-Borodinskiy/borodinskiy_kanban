@@ -162,6 +162,10 @@ const handleBgUpload = async (event) => {
             </ol>
           </div>
 
+          <div v-if="store.sync.conflict" class="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg p-3 text-sm text-amber-800 dark:text-amber-300">
+            ⚠️ The cloud copy was changed on another device. Choose <strong>Download</strong> to take the cloud version, or <strong>Upload</strong> to overwrite it with this device’s data.
+          </div>
+
           <div class="space-y-3">
             <div>
               <label class="block text-xs font-bold text-gray-500 uppercase mb-1">GitHub Token (gist scope)</label>

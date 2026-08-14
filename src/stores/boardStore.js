@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { pushGist, pullGist } from '../utils/cloudSync'
+import { pushGist, pullGist, fetchGistMeta } from '../utils/cloudSync'
 
 const storage = {
   async get(key) {
@@ -74,6 +74,10 @@ let syncBound = false
 let storageErrorShown = false
 // Debounce for auto-pushing to the cloud after local changes.
 let cloudPushTimeout = null
+// Undo state kept in module scope: holds the restore closure + its timer so the
+// (non-serializable) function never lands in reactive state or gets persisted.
+let undoRestore = null
+let undoTimer = null
 
 export const useBoardStore = defineStore('board', {
   state: () => ({
@@ -95,8 +99,14 @@ export const useBoardStore = defineStore('board', {
     isColumnsLocked: true,
     isDraggingTask: false,
     // Cloud sync config — stored separately from the workspace so the token is
-    // never included in exported/imported backups.
-    sync: { token: '', gistId: '', autoPush: false, lastSyncedAt: null, status: '', busy: false }
+    // never included in exported/imported backups. cloudUpdatedAt is the gist's
+    // server-side updated_at at our last sync, used to detect remote changes.
+    sync: { token: '', gistId: '', autoPush: false, lastSyncedAt: null, cloudUpdatedAt: null, status: '', busy: false, conflict: false },
+    // Transient "Deleted · Undo" toast.
+    undo: { visible: false, message: '' },
+    // Per-card expanded checklist/links sections, keyed by task id (UI only).
+    expandedSubtasks: {},
+    expandedLinks: {}
   }),
 
   getters: {
@@ -220,24 +230,44 @@ export const useBoardStore = defineStore('board', {
       try {
         const s = await storage.get('kanban_sync')
         if (s && typeof s === 'object') {
-          this.sync = { ...this.sync, token: s.token || '', gistId: s.gistId || '', autoPush: !!s.autoPush, lastSyncedAt: s.lastSyncedAt || null }
+          this.sync = { ...this.sync, token: s.token || '', gistId: s.gistId || '', autoPush: !!s.autoPush, lastSyncedAt: s.lastSyncedAt || null, cloudUpdatedAt: s.cloudUpdatedAt || null }
         }
       } catch (e) { console.error('Failed to load sync config:', e) }
     },
     async saveSyncConfig() {
       await storage.set('kanban_sync', {
-        token: this.sync.token, gistId: this.sync.gistId, autoPush: this.sync.autoPush, lastSyncedAt: this.sync.lastSyncedAt
+        token: this.sync.token, gistId: this.sync.gistId, autoPush: this.sync.autoPush, lastSyncedAt: this.sync.lastSyncedAt, cloudUpdatedAt: this.sync.cloudUpdatedAt
       })
     },
-    async cloudPush() {
+    // auto=true suppresses dialogs (used by background auto-push): on conflict it
+    // pauses instead of prompting or blindly overwriting.
+    async cloudPush(auto = false) {
       if (this.sync.busy) return false
+      const token = this.sync.token.trim(), gistId = this.sync.gistId.trim()
+      // Conflict guard: has the gist changed elsewhere since our last sync?
+      if (gistId && this.sync.cloudUpdatedAt) {
+        try {
+          const meta = await fetchGistMeta(token, gistId)
+          if (meta.updatedAt && new Date(meta.updatedAt) > new Date(this.sync.cloudUpdatedAt)) {
+            if (auto) {
+              this.sync.conflict = true
+              this.sync.status = 'Auto-upload paused: cloud was changed on another device. Open Cloud Sync to resolve.'
+              return false
+            }
+            const overwrite = await this.requestDialog({ type: 'confirm', title: 'Cloud changed elsewhere', message: 'The cloud copy was updated on another device after your last sync. Overwrite it with this device’s version?', confirmText: 'Overwrite cloud', isDanger: true })
+            if (!overwrite) { this.sync.status = 'Upload cancelled.'; return false }
+          }
+        } catch (e) { /* offline / meta failed — fall through and try the push */ }
+      }
       this.sync.busy = true
-      this.sync.status = this.sync.gistId ? 'Uploading…' : 'Creating cloud backup…'
+      this.sync.status = gistId ? 'Uploading…' : 'Creating cloud backup…'
       try {
         const data = { settings: this.settings, assignees: this.assignees, boards: this.boards, columns: this.columns, tasks: this.tasks }
-        const id = await pushGist(this.sync.token.trim(), this.sync.gistId.trim(), data)
-        this.sync.gistId = id
+        const res = await pushGist(token, gistId, data)
+        this.sync.gistId = res.id
+        this.sync.cloudUpdatedAt = res.updatedAt
         this.sync.lastSyncedAt = new Date().toISOString()
+        this.sync.conflict = false
         this.sync.status = 'Uploaded ✓'
         await this.saveSyncConfig()
         return true
@@ -246,19 +276,23 @@ export const useBoardStore = defineStore('board', {
         return false
       } finally { this.sync.busy = false }
     },
-    async cloudPull() {
+    async cloudPull(skipConfirm = false) {
       if (this.sync.busy) return false
-      const confirmed = await this.requestDialog({ type: 'confirm', title: 'Pull from Cloud', message: 'This replaces your current local workspace with the cloud backup. Continue?', confirmText: 'Pull & Overwrite', isDanger: true })
-      if (!confirmed) return false
+      if (!skipConfirm) {
+        const confirmed = await this.requestDialog({ type: 'confirm', title: 'Pull from Cloud', message: 'This replaces your current local workspace with the cloud backup. Continue?', confirmText: 'Pull & Overwrite', isDanger: true })
+        if (!confirmed) return false
+      }
       this.sync.busy = true
       this.sync.status = 'Downloading…'
       try {
-        const data = await pullGist(this.sync.token.trim(), this.sync.gistId.trim())
-        if (!data || !Array.isArray(data.columns)) throw new Error('Cloud backup is not a valid workspace.')
-        this.$patch(migrateData(data))
+        const res = await pullGist(this.sync.token.trim(), this.sync.gistId.trim())
+        if (!res.data || !Array.isArray(res.data.columns)) throw new Error('Cloud backup is not a valid workspace.')
+        this.$patch(migrateData(res.data))
         this.applyTheme()
         await this.saveData()
+        this.sync.cloudUpdatedAt = res.updatedAt
         this.sync.lastSyncedAt = new Date().toISOString()
+        this.sync.conflict = false
         this.sync.status = 'Downloaded ✓'
         await this.saveSyncConfig()
         return true
@@ -267,19 +301,33 @@ export const useBoardStore = defineStore('board', {
         return false
       } finally { this.sync.busy = false }
     },
+    // On startup, if the gist is newer than our last sync, offer to pull it.
+    async checkCloudOnStartup() {
+      const token = this.sync.token.trim(), gistId = this.sync.gistId.trim()
+      if (!token || !gistId || !this.sync.cloudUpdatedAt) return
+      try {
+        const meta = await fetchGistMeta(token, gistId)
+        if (meta.updatedAt && new Date(meta.updatedAt) > new Date(this.sync.cloudUpdatedAt)) {
+          this.sync.conflict = true
+          const pull = await this.requestDialog({ type: 'confirm', title: 'Cloud has newer data', message: 'Your workspace was updated on another device. Load the latest version from the cloud? (Your current local data will be replaced.)', confirmText: 'Load from cloud' })
+          if (pull) await this.cloudPull(true)
+          else this.sync.status = 'Using local copy — cloud has newer changes.'
+        }
+      } catch (e) { /* offline — ignore */ }
+    },
     async setAutoPush(enabled) {
       this.sync.autoPush = enabled
       await this.saveSyncConfig()
     },
     async disconnectCloud() {
-      this.sync = { token: '', gistId: '', autoPush: false, lastSyncedAt: null, status: '', busy: false }
+      this.sync = { token: '', gistId: '', autoPush: false, lastSyncedAt: null, cloudUpdatedAt: null, status: '', busy: false, conflict: false }
       await this.saveSyncConfig()
     },
     // Debounced background upload after local edits (only when enabled & connected).
     maybeAutoPush() {
       if (!this.sync.autoPush || !this.sync.token || !this.sync.gistId || this.sync.busy) return
       clearTimeout(cloudPushTimeout)
-      cloudPushTimeout = setTimeout(() => { this.cloudPush() }, 3000)
+      cloudPushTimeout = setTimeout(() => { this.cloudPush(true) }, 3000)
     },
 
     async importWorkspace(jsonData) {
@@ -328,11 +376,20 @@ export const useBoardStore = defineStore('board', {
       const confirmed = await this.requestDialog({ type: 'confirm', title: 'Delete Board', message: 'Are you sure? Archived tasks will be saved, but active columns and tasks will be deleted.', confirmText: 'Delete Board', isDanger: true })
       if(confirmed) {
          const boardId = this.settings.activeBoardId
-         const colIds = this.columns.filter(c => c.boardId === boardId).map(c => c.id)
+         const removedBoard = this.boards.find(b => b.id === boardId)
+         const removedColumns = this.columns.filter(c => c.boardId === boardId)
+         const colIds = removedColumns.map(c => c.id)
+         const removedTasks = this.tasks.filter(t => !t.isArchived && colIds.includes(t.columnId))
          this.tasks = this.tasks.filter(t => t.isArchived || !colIds.includes(t.columnId))
          this.columns = this.columns.filter(c => c.boardId !== boardId)
          this.boards = this.boards.filter(b => b.id !== boardId)
          this.settings.activeBoardId = this.boards.length > 0 ? this.boards[0].id : null
+         this.pushUndo('Board deleted', () => {
+           if (removedBoard) this.boards.push(removedBoard)
+           this.columns.push(...removedColumns)
+           this.tasks.push(...removedTasks)
+           this.settings.activeBoardId = boardId
+         })
       }
     },
     duplicateBoard() {
@@ -371,8 +428,15 @@ export const useBoardStore = defineStore('board', {
       if (index !== -1) this.columns[index] = { ...this.columns[index], ...updates }
     },
     deleteColumn(id) {
+      const removedColumn = this.columns.find(c => c.id === id)
+      if (!removedColumn) return
+      const removedTasks = this.tasks.filter(t => t.columnId === id)
       this.columns = this.columns.filter(c => c.id !== id)
       this.tasks = this.tasks.filter(t => t.columnId !== id)
+      this.pushUndo('Column deleted', () => {
+        this.columns.push(removedColumn)
+        this.tasks.push(...removedTasks)
+      })
     },
     toggleColumnArchive(columnId) {
       const col = this.columns.find(c => c.id === columnId)
@@ -470,6 +534,41 @@ export const useBoardStore = defineStore('board', {
       this.editingTask = null
       this.editingTaskSnapshot = null
     },
+
+    // --- UNDO (deletions) ---
+    pushUndo(message, restoreFn) {
+      clearTimeout(undoTimer)
+      undoRestore = restoreFn
+      this.undo = { visible: true, message }
+      undoTimer = setTimeout(() => this.dismissUndo(), 7000)
+    },
+    performUndo() {
+      clearTimeout(undoTimer)
+      if (undoRestore) { undoRestore(); undoRestore = null }
+      this.undo = { visible: false, message: '' }
+    },
+    dismissUndo() {
+      clearTimeout(undoTimer)
+      undoRestore = null
+      this.undo = { visible: false, message: '' }
+    },
+
+    // --- CARD EXPAND/COLLAPSE ---
+    toggleCardSection(kind, taskId) {
+      const map = kind === 'links' ? this.expandedLinks : this.expandedSubtasks
+      map[taskId] = !map[taskId]
+    },
+    expandAllCards() {
+      this.tasks.forEach(t => {
+        if (t.subtasks?.length) this.expandedSubtasks[t.id] = true
+        if (t.links?.length) this.expandedLinks[t.id] = true
+      })
+    },
+    collapseAllCards() {
+      // Mutate in place (don't reassign) so components holding a reference stay live.
+      Object.keys(this.expandedSubtasks).forEach(k => delete this.expandedSubtasks[k])
+      Object.keys(this.expandedLinks).forEach(k => delete this.expandedLinks[k])
+    },
     saveTask(taskData) {
       if (taskData.isNew) {
         delete taskData.isNew
@@ -488,8 +587,12 @@ export const useBoardStore = defineStore('board', {
       }
     },
     deleteTask(taskId) {
-      this.tasks = this.tasks.filter(t => t.id !== taskId)
+      const idx = this.tasks.findIndex(t => t.id === taskId)
+      if (idx === -1) { this.closeModal(); return }
+      const removed = this.tasks[idx]
+      this.tasks.splice(idx, 1)
       this.closeModal()
+      this.pushUndo('Task deleted', () => { this.tasks.push(removed) })
     },
 
     searchTasks(query, scope = 'current') {

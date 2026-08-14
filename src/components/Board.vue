@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, reactive, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import { renderMarkdown } from '../utils/markdown'
 import { useBoardStore } from '../stores/boardStore'
@@ -9,8 +9,10 @@ const props = defineProps({ searchQuery: String, searchScope: String })
 const store = useBoardStore()
 const columnTasksCache = {}
 const editingColId = ref(null)
-const expandedSubtasks = reactive({})
-const expandedLinks = reactive({})
+// Expanded checklist/links state lives in the store so the header "Expand all"
+// button and the per-card chevrons operate on the same source of truth.
+const expandedSubtasks = store.expandedSubtasks
+const expandedLinks = store.expandedLinks
 
 const getAssignee = (id) => store.assignees.find(a => a.id === id)
 

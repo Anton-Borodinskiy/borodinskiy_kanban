@@ -34,7 +34,16 @@ export async function pushGist(token, gistId, data) {
   const res = await fetch(url, { method, headers: authHeaders(token), body: JSON.stringify(payload) })
   if (!res.ok) throw new Error(await failMessage(res))
   const json = await res.json()
-  return json.id
+  return { id: json.id, updatedAt: json.updated_at }
+}
+
+// Cheap-ish metadata read (server-side updated_at) for conflict detection.
+export async function fetchGistMeta(token, gistId) {
+  if (!token || !gistId) throw new Error('Not connected')
+  const res = await fetch(`${API}/gists/${gistId}`, { headers: authHeaders(token) })
+  if (!res.ok) throw new Error(await failMessage(res))
+  const json = await res.json()
+  return { updatedAt: json.updated_at }
 }
 
 // Read the workspace JSON back out of the gist.
@@ -53,5 +62,5 @@ export async function pullGist(token, gistId) {
     if (!raw.ok) throw new Error('Could not download the full backup.')
     content = await raw.text()
   }
-  return JSON.parse(content)
+  return { data: JSON.parse(content), updatedAt: json.updated_at }
 }

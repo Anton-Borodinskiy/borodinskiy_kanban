@@ -7,13 +7,20 @@ import DashboardView from './components/DashboardView.vue'
 import TaskModal from './components/TaskModal.vue'
 import GlobalDialog from './components/GlobalDialog.vue'
 import SettingsModal from './components/SettingsModal.vue'
-import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon, Cog6ToothIcon, ViewColumnsIcon, DocumentDuplicateIcon, PencilIcon, ChevronLeftIcon, ChevronRightIcon, UsersIcon, ArchiveBoxIcon, TrashIcon, LockClosedIcon, LockOpenIcon, ChartPieIcon, Bars3Icon, Squares2X2Icon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/vue/24/outline'
+import { MagnifyingGlassIcon, SunIcon, MoonIcon, PlusIcon, Cog6ToothIcon, ViewColumnsIcon, DocumentDuplicateIcon, PencilIcon, ChevronLeftIcon, ChevronRightIcon, UsersIcon, ArchiveBoxIcon, TrashIcon, LockClosedIcon, LockOpenIcon, ChartPieIcon, Bars3Icon, Squares2X2Icon, SpeakerWaveIcon, SpeakerXMarkIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, ArrowUturnLeftIcon } from '@heroicons/vue/24/outline'
 
 const store = useBoardStore()
 const searchQuery = ref('')
 const searchScope = ref('current')
 const isFilterOpen = ref(false)
 const searchInput = ref(null)
+const allCardsExpanded = ref(false)
+
+const toggleExpandAll = () => {
+  if (allCardsExpanded.value) store.collapseAllCards()
+  else store.expandAllCards()
+  allCardsExpanded.value = !allCardsExpanded.value
+}
 
 const searchResults = computed(() => {
   if (searchScope.value === 'all' && searchQuery.value.length > 1) return store.searchTasks(searchQuery.value, 'all')
@@ -62,10 +69,11 @@ const handleBeforeUnload = (e) => {
   }
 }
 
-onMounted(() => {
-  store.loadData()
+onMounted(async () => {
+  await store.loadData()
   store.$subscribe(() => { if (store.isLoaded) store.saveData() })
   store.setupSync()
+  store.checkCloudOnStartup()
   window.addEventListener('keydown', handleKeydown)
   window.addEventListener('beforeunload', handleBeforeUnload)
 })
@@ -137,6 +145,10 @@ onUnmounted(() => {
         </div>
 
         <div class="flex items-center gap-1 flex-shrink-0">
+          <button v-if="store.currentView === 'board'" @click="toggleExpandAll" class="p-1.5 text-gray-500 hover:text-gray-900 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-md transition-colors" :title="allCardsExpanded ? 'Collapse all checklists & links' : 'Expand all checklists & links'">
+            <ArrowsPointingInIcon v-if="allCardsExpanded" class="w-5 h-5" />
+            <ArrowsPointingOutIcon v-else class="w-5 h-5" />
+          </button>
           <button @click="store.toggleCompactMode" class="p-1.5 text-gray-500 hover:text-gray-900 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-md transition-colors" :title="store.settings.isCompactMode ? 'Detailed View' : 'Compact View'">
              <Bars3Icon v-if="store.settings.isCompactMode" class="w-5 h-5" />
              <Squares2X2Icon v-else class="w-5 h-5" />
@@ -161,6 +173,14 @@ onUnmounted(() => {
     <TaskModal />
     <GlobalDialog />
     <SettingsModal />
+
+    <div v-if="store.undo.visible" class="undo-toast fixed bottom-6 left-1/2 -translate-x-1/2 z-[110] flex items-center gap-4 bg-gray-900 dark:bg-gray-700 text-white pl-5 pr-3 py-3 rounded-xl shadow-2xl border border-white/10">
+      <span class="text-sm font-medium whitespace-nowrap">{{ store.undo.message }}</span>
+      <button @click="store.performUndo" class="flex items-center gap-1.5 text-sm font-bold text-blue-300 hover:text-blue-200 transition-colors">
+        <ArrowUturnLeftIcon class="w-4 h-4" /> Undo
+      </button>
+      <button @click="store.dismissUndo" class="text-gray-400 hover:text-white text-xl leading-none">&times;</button>
+    </div>
   </div>
   <div v-else class="h-screen bg-gray-50 dark:bg-gray-900"></div>
 </template>

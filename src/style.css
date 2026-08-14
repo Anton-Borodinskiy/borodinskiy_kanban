@@ -12,3 +12,14 @@
     @apply bg-gray-900 text-gray-100;
   }
 }
+
+/* Undo toast: CSS-only entrance so removal never depends on transitionend
+   (which can stall in a backgrounded tab). Centering translateX(-50%) is kept
+   via the utility class; only opacity animates to avoid a transform conflict. */
+@keyframes undoToastIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.undo-toast {
+  animation: undoToastIn 0.2s ease-out;
+}
