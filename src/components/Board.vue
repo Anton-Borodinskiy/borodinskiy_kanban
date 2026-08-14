@@ -144,7 +144,7 @@ watch(dropzoneArchiveTasks, (newVal) => { if(newVal.length > 0) { store.archiveT
               <div v-if="task.dueDate" class="flex items-center gap-1.5 mb-2 text-[10px]" :class="getDueDateInfo(task.dueDate, column.isArchive).class">
                 <CalendarDaysIcon class="w-3.5 h-3.5" /><span>{{ getDueDateInfo(task.dueDate, column.isArchive).label }}</span>
               </div>
-              <p v-if="task.description" class="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 mb-2">{{ task.description }}</p>
+              <div v-if="task.description" class="text-[11px] text-gray-500 dark:text-gray-400 mb-2 line-clamp-3 prose prose-sm dark:prose-invert max-w-none prose-p:my-0 prose-headings:my-0.5 prose-headings:text-xs prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-a:text-blue-600 prose-code:text-[10px]" v-html="renderMarkdown(task.description)"></div>
 
               <div v-if="task.subtasks?.length" class="mt-2 border-t border-gray-100 dark:border-gray-600/50 pt-2" @click.stop>
                  <button @click="expandedSubtasks[task.id] = !expandedSubtasks[task.id]" class="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 hover:text-blue-500 transition-colors">
