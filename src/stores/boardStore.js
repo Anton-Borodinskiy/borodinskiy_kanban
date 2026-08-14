@@ -104,9 +104,10 @@ export const useBoardStore = defineStore('board', {
     sync: { token: '', gistId: '', autoPush: false, lastSyncedAt: null, cloudUpdatedAt: null, status: '', busy: false, conflict: false },
     // Transient "Deleted · Undo" toast.
     undo: { visible: false, message: '' },
-    // Per-card expanded checklist/links sections, keyed by task id (UI only).
+    // Per-card expanded checklist/links/description sections, keyed by task id (UI only).
     expandedSubtasks: {},
-    expandedLinks: {}
+    expandedLinks: {},
+    expandedDesc: {}
   }),
 
   getters: {
@@ -555,19 +556,21 @@ export const useBoardStore = defineStore('board', {
 
     // --- CARD EXPAND/COLLAPSE ---
     toggleCardSection(kind, taskId) {
-      const map = kind === 'links' ? this.expandedLinks : this.expandedSubtasks
+      const map = kind === 'links' ? this.expandedLinks : kind === 'desc' ? this.expandedDesc : this.expandedSubtasks
       map[taskId] = !map[taskId]
     },
     expandAllCards() {
       this.tasks.forEach(t => {
         if (t.subtasks?.length) this.expandedSubtasks[t.id] = true
         if (t.links?.length) this.expandedLinks[t.id] = true
+        if (t.description) this.expandedDesc[t.id] = true
       })
     },
     collapseAllCards() {
       // Mutate in place (don't reassign) so components holding a reference stay live.
       Object.keys(this.expandedSubtasks).forEach(k => delete this.expandedSubtasks[k])
       Object.keys(this.expandedLinks).forEach(k => delete this.expandedLinks[k])
+      Object.keys(this.expandedDesc).forEach(k => delete this.expandedDesc[k])
     },
     saveTask(taskData) {
       if (taskData.isNew) {

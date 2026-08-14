@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, reactive, watch } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import { renderMarkdown } from '../utils/markdown'
 import { useBoardStore } from '../stores/boardStore'
@@ -13,6 +13,19 @@ const editingColId = ref(null)
 // button and the per-card chevrons operate on the same source of truth.
 const expandedSubtasks = store.expandedSubtasks
 const expandedLinks = store.expandedLinks
+
+// Tracks which task descriptions actually overflow the 3-line clamp, so the
+// "Show more" toggle only appears when there's hidden text. Measured while
+// clamped; skipped when expanded so the value (and "Show less") persists.
+const descOverflow = reactive({})
+const measureClamp = (el, id) => {
+  if (store.expandedDesc[id]) return
+  descOverflow[id] = el.scrollHeight > el.clientHeight + 2
+}
+const vClamp = {
+  mounted: (el, binding) => measureClamp(el, binding.value),
+  updated: (el, binding) => measureClamp(el, binding.value)
+}
 
 const getAssignee = (id) => store.assignees.find(a => a.id === id)
 
@@ -144,7 +157,12 @@ watch(dropzoneArchiveTasks, (newVal) => { if(newVal.length > 0) { store.archiveT
               <div v-if="task.dueDate" class="flex items-center gap-1.5 mb-2 text-[10px]" :class="getDueDateInfo(task.dueDate, column.isArchive).class">
                 <CalendarDaysIcon class="w-3.5 h-3.5" /><span>{{ getDueDateInfo(task.dueDate, column.isArchive).label }}</span>
               </div>
-              <div v-if="task.description" class="text-[11px] text-gray-500 dark:text-gray-400 mb-2 line-clamp-3 prose prose-sm dark:prose-invert max-w-none prose-p:my-0 prose-headings:my-0.5 prose-headings:text-xs prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-a:text-blue-600 prose-code:text-[10px]" v-html="renderMarkdown(task.description)"></div>
+              <div v-if="task.description" class="mb-2">
+                <div v-clamp="task.id" :class="['text-[11px] text-gray-500 dark:text-gray-400 prose prose-sm dark:prose-invert max-w-none prose-p:my-0 prose-headings:my-0.5 prose-headings:text-xs prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-a:text-blue-600 prose-code:text-[10px]', store.expandedDesc[task.id] ? '' : 'line-clamp-3']" v-html="renderMarkdown(task.description)"></div>
+                <button v-if="descOverflow[task.id] || store.expandedDesc[task.id]" @click.stop="store.toggleCardSection('desc', task.id)" class="text-[10px] font-bold text-blue-500 hover:text-blue-600 mt-0.5">
+                  {{ store.expandedDesc[task.id] ? 'Show less' : 'Show more' }}
+                </button>
+              </div>
 
               <div v-if="task.subtasks?.length" class="mt-2 border-t border-gray-100 dark:border-gray-600/50 pt-2" @click.stop>
                  <button @click="expandedSubtasks[task.id] = !expandedSubtasks[task.id]" class="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 hover:text-blue-500 transition-colors">
