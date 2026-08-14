@@ -1,6 +1,6 @@
 <script setup>
 import { useBoardStore } from '../stores/boardStore'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { MagnifyingGlassIcon, ArrowUturnLeftIcon, TrashIcon, ArrowsUpDownIcon } from '@heroicons/vue/24/outline'
 
 const store = useBoardStore()
@@ -29,6 +29,11 @@ const paginatedTasks = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value
   return filteredAndSorted.value.slice(start, start + itemsPerPage.value)
 })
+
+// Searching or re-sorting shrinks the result set; without this you'd be stranded
+// on a now-empty page reading "Page 6 of 1" and think the search found nothing.
+watch([search, sortBy], () => { currentPage.value = 1 })
+watch(totalPages, (max) => { if (currentPage.value > max) currentPage.value = max })
 
 const formatDate = (isoString) => {
   if (!isoString) return '-'

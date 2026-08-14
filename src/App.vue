@@ -172,7 +172,7 @@ onUnmounted(() => {
     </header>
 
     <main class="flex-1 overflow-hidden relative">
-      <Board v-if="store.currentView === 'board'" :searchQuery="searchQuery" :searchScope="searchScope" />
+      <Board v-if="store.currentView === 'board'" :searchQuery="searchQuery" :searchScope="searchScope" @create-board="createNewBoard" />
       <ArchiveView v-else-if="store.currentView === 'archive'" />
       <DashboardView v-else-if="store.currentView === 'dashboard'" />
     </main>

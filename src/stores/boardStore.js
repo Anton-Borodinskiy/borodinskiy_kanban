@@ -489,7 +489,13 @@ export const useBoardStore = defineStore('board', {
 
     // --- COLUMNS ---
     addColumn(boardId, title, isArchive = false) {
-      this.columns.push({ id: generateId('col'), boardId, title, order: this.columns.filter(c => c.boardId === boardId).length, width: 'w-80', isArchive, wipLimit: 0 })
+      // Guard: without a board the column would be invisible forever.
+      if (!boardId) return
+      // max+1 rather than a count, which went stale after a deletion and produced
+      // two columns sharing an order (making the reorder arrows silently no-op).
+      const siblings = this.columns.filter(c => c.boardId === boardId)
+      const nextOrder = siblings.length ? Math.max(...siblings.map(c => c.order ?? 0)) + 1 : 0
+      this.columns.push({ id: generateId('col'), boardId, title, order: nextOrder, width: 'w-80', isArchive, wipLimit: 0 })
     },
     updateColumn(id, updates) {
       const index = this.columns.findIndex(c => c.id === id)
@@ -517,15 +523,16 @@ export const useBoardStore = defineStore('board', {
       if (col) col.wipLimit = parseInt(limit) || 0
     },
     moveColumn(columnId, direction) {
-      const columns = this.activeColumns
+      const columns = [...this.activeColumns]
       const idx = columns.findIndex(c => c.id === columnId)
       if (idx === -1) return
       const newIdx = idx + direction
-      if (newIdx >= 0 && newIdx < columns.length) {
-        const tempOrder = columns[idx].order
-        columns[idx].order = columns[newIdx].order
-        columns[newIdx].order = tempOrder
-      }
+      if (newIdx < 0 || newIdx >= columns.length) return
+      // Reposition then renumber sequentially. Swapping order *values* was a
+      // silent no-op whenever two columns happened to share the same order.
+      const [moved] = columns.splice(idx, 1)
+      columns.splice(newIdx, 0, moved)
+      columns.forEach((c, i) => { c.order = i })
     },
 
     // --- TASKS ---
@@ -551,20 +558,44 @@ export const useBoardStore = defineStore('board', {
     },
     archiveAllInColumn(columnId) {
       const col = this.columns.find(c => c.id === columnId)
-      this.tasks.filter(t => t.columnId === columnId && !t.isArchived).forEach(t => {
+      const affected = this.tasks.filter(t => t.columnId === columnId && !t.isArchived)
+      if (affected.length === 0) return
+      // Remember prior values so the archive can be undone like a deletion.
+      const before = affected.map(t => ({ id: t.id, archivedAt: t.archivedAt, originalBoardId: t.originalBoardId }))
+      affected.forEach(t => {
         t.isArchived = true
         t.archivedAt = new Date().toISOString()
         t.originalBoardId = col ? col.boardId : null
       })
+      this.pushUndo(`${affected.length} tasks archived`, () => {
+        before.forEach(prev => {
+          const t = this.tasks.find(x => x.id === prev.id)
+          if (t) { t.isArchived = false; t.archivedAt = prev.archivedAt; t.originalBoardId = prev.originalBoardId }
+        })
+      })
+    },
+    // A task entering a Done/archive column is "closed"; leaving one reopens it.
+    // Keeps the previously dead `closedAt` field meaningful for analytics.
+    syncClosedAt(taskId) {
+      const task = this.tasks.find(t => t.id === taskId)
+      if (!task) return
+      const col = this.columns.find(c => c.id === task.columnId)
+      if (col?.isArchive) { if (!task.closedAt) task.closedAt = new Date().toISOString() }
+      else if (task.closedAt) task.closedAt = null
     },
 
     openNewTaskModal(columnId = null) {
       const targetColId = columnId || (this.activeColumns[0]?.id)
       if (!targetColId) return
+      // Place after the current last task. A plain count went stale after any
+      // deletion (and counted archived tasks), colliding with an existing order
+      // and dropping new cards into the middle of the column.
+      const active = this.tasks.filter(t => t.columnId === targetColId && !t.isArchived)
+      const nextOrder = active.length ? Math.max(...active.map(t => t.order ?? 0)) + 1 : 0
       this.editingTask = {
         id: generateId('task'), columnId: targetColId, assigneeIds: [], color: 'default',
         subtasks: [], links: [], title: '', description: '', dueDate: null, // <-- Добавили links: []
-        order: this.tasks.filter(t => t.columnId === targetColId).length,
+        order: nextOrder,
         createdAt: new Date().toISOString(), closedAt: null, closingComment: null,
         isNew: true, isArchived: false
       }
