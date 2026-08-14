@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useBoardStore } from './stores/boardStore'
 import Board from './components/Board.vue'
 import ArchiveView from './components/ArchiveView.vue'
@@ -71,7 +71,14 @@ const handleBeforeUnload = (e) => {
 
 onMounted(async () => {
   await store.loadData()
-  store.$subscribe(() => { if (store.isLoaded) store.saveData() })
+  // Watch only the persisted tables. A blanket $subscribe also fired for purely
+  // transient UI state — including editingTask, which is mutated on every
+  // keystroke in the task modal — re-serializing the whole workspace each time.
+  watch(
+    () => [store.settings, store.assignees, store.boards, store.columns, store.tasks],
+    () => { if (store.isLoaded) store.saveData() },
+    { deep: true }
+  )
   store.setupSync()
   store.checkCloudOnStartup()
   window.addEventListener('keydown', handleKeydown)

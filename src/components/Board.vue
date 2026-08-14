@@ -89,7 +89,7 @@ const handleAdd = (evt, col) => { if(col.isArchive) playDing() }
 
 const toggleArchiveTask = async (task) => { const confirmed = await store.requestDialog({ type: 'confirm', title: 'Archive Task', message: 'Move this task to the Global Archive?', confirmText: 'Archive' }); if (confirmed) store.archiveTask(task.id) }
 const addNewColumn = async () => { const result = await store.requestDialog({ type: 'addColumn', title: 'Add New Column', confirmText: 'Add' }); if (result) store.addColumn(store.settings.activeBoardId, result.title, result.isArchive) }
-const removeColumn = async (id) => { const confirmed = await store.requestDialog({ type: 'confirm', title: 'Delete Column', message: 'Delete column and ALL tasks? This cannot be undone.', confirmText: 'Delete', isDanger: true }); if (confirmed) store.deleteColumn(id) }
+const removeColumn = async (id) => { const confirmed = await store.requestDialog({ type: 'confirm', title: 'Delete Column', message: 'Delete this column and its active tasks? Archived tasks are kept in the Global Archive.', confirmText: 'Delete', isDanger: true }); if (confirmed) store.deleteColumn(id) }
 const setWipLimit = async (col) => { const result = await store.requestDialog({ type: 'prompt', title: 'Set WIP Limit', message: 'Enter max number of tasks (0 for no limit):', confirmText: 'Set Limit' }); if (result !== null) store.setColumnWip(col.id, result) }
 const clearArchiveColumn = async (columnId) => { const count = getTasks(columnId).value.length; if (count === 0) return; const confirmed = await store.requestDialog({ type: 'confirm', title: 'Clear Column', message: `Move ${count} tasks to the Global Archive?`, confirmText: 'Archive' }); if (confirmed) store.archiveAllInColumn(columnId) }
 

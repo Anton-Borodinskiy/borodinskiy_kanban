@@ -64,7 +64,11 @@ const migrateData = (data) => {
   return { settings, assignees, boards, columns, tasks }
 }
 
-const generateId = (prefix) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+// Monotonic counter guarantees uniqueness even when many ids are minted inside a
+// single synchronous loop (e.g. duplicateBoard), where Date.now() is constant and
+// the random suffix alone collides often (~71% for 50 items).
+let idCounter = 0
+const generateId = (prefix) => `${prefix}-${Date.now()}-${(idCounter++).toString(36)}-${Math.floor(Math.random() * 1000)}`
 let saveTimeout = null;
 // When true, saveData() is a no-op — used while applying an external change from
 // another tab so we don't echo it straight back to storage.
@@ -78,6 +82,13 @@ let cloudPushTimeout = null
 // (non-serializable) function never lands in reactive state or gets persisted.
 let undoRestore = null
 let undoTimer = null
+// Local restore points.
+const MAX_SNAPSHOTS = 10
+const SNAPSHOT_INTERVAL_MS = 60 * 60 * 1000
+let lastSnapshotAt = 0
+// Serialized copy of what we last wrote, so the cross-tab echo check doesn't
+// have to re-stringify the whole reactive state on every save.
+let lastWrittenJson = null
 
 export const useBoardStore = defineStore('board', {
   state: () => ({
@@ -187,13 +198,56 @@ export const useBoardStore = defineStore('board', {
       clearTimeout(saveTimeout)
       saveTimeout = setTimeout(async () => {
         try {
-          await storage.set('kanban_data', { settings: this.settings, assignees: this.assignees, boards: this.boards, columns: this.columns, tasks: this.tasks })
+          const payload = { settings: this.settings, assignees: this.assignees, boards: this.boards, columns: this.columns, tasks: this.tasks }
+          // Stringify once and reuse for the cross-tab echo check below.
+          lastWrittenJson = JSON.stringify(payload)
+          await storage.set('kanban_data', payload)
+          this.maybeAutoSnapshot()
           this.maybeAutoPush()
         } catch (e) {
           console.error('Failed to save kanban data:', e)
           this.notifyStorageError()
         }
       }, 300)
+    },
+
+    // --- SNAPSHOTS (local restore points) ---
+    // Kept under their own storage key so they never ride along in exports or
+    // cloud pushes. Bounded to MAX_SNAPSHOTS newest-first.
+    async saveSnapshot(reason) {
+      try {
+        const existing = (await storage.get('kanban_snapshots')) || []
+        const entry = {
+          at: new Date().toISOString(),
+          reason,
+          counts: { boards: this.boards.length, columns: this.columns.length, tasks: this.tasks.length },
+          data: { settings: this.settings, assignees: this.assignees, boards: this.boards, columns: this.columns, tasks: this.tasks }
+        }
+        await storage.set('kanban_snapshots', [entry, ...existing].slice(0, MAX_SNAPSHOTS))
+      } catch (e) { console.error('Failed to save snapshot:', e) }
+    },
+    async listSnapshots() {
+      try {
+        const list = (await storage.get('kanban_snapshots')) || []
+        return list.map(({ at, reason, counts }) => ({ at, reason, counts }))
+      } catch (e) { return [] }
+    },
+    async restoreSnapshot(index) {
+      const list = (await storage.get('kanban_snapshots')) || []
+      const entry = list[index]
+      if (!entry || !Array.isArray(entry.data?.columns)) return false
+      await this.saveSnapshot('before restore')
+      this.$patch(migrateData(entry.data))
+      this.applyTheme()
+      await this.saveData()
+      return true
+    },
+    // Auto-snapshot at most once an hour on normal edits.
+    maybeAutoSnapshot() {
+      const now = Date.now()
+      if (now - lastSnapshotAt < SNAPSHOT_INTERVAL_MS) return
+      lastSnapshotAt = now
+      this.saveSnapshot('auto')
     },
 
     // Warn once when storage is full so changes aren't silently dropped.
@@ -217,8 +271,9 @@ export const useBoardStore = defineStore('board', {
         if (area !== 'local' || !changes.kanban_data) return
         const newVal = changes.kanban_data.newValue
         if (!newVal) return
-        const current = JSON.stringify({ settings: this.settings, assignees: this.assignees, boards: this.boards, columns: this.columns, tasks: this.tasks })
-        if (JSON.stringify(newVal) === current) return // our own write / no-op echo
+        // Compare against what we last wrote instead of re-stringifying the whole
+        // reactive state (which walked every getter on every single save).
+        if (JSON.stringify(newVal) === lastWrittenJson) return // our own write / no-op echo
         if (this.isModalOpen || this.isSettingsOpen || this.dialog.isOpen) return // don't interrupt an edit
         suppressSave = true
         try { this.$patch(migrateData(newVal)) } finally { suppressSave = false }
@@ -331,16 +386,26 @@ export const useBoardStore = defineStore('board', {
       cloudPushTimeout = setTimeout(() => { this.cloudPush(true) }, 3000)
     },
 
-    async importWorkspace(jsonData) {
-      // Accept any backup that carries at least one of the core tables, then run
-      // it through the same migrations as a normal load so old exports keep working.
-      if (jsonData && typeof jsonData === 'object' && (Array.isArray(jsonData.boards) || Array.isArray(jsonData.columns))) {
-        this.$patch(migrateData(jsonData))
-        await this.saveData()
-        this.applyTheme()
-        return true
+    // Describes an incoming backup so the user can confirm before it replaces
+    // everything. Returns null when the file isn't a recognizable workspace.
+    describeWorkspace(jsonData) {
+      // `columns` is the core table (same requirement as loadData) — accepting a
+      // file without it would wipe every column and orphan every task.
+      if (!jsonData || typeof jsonData !== 'object' || !Array.isArray(jsonData.columns)) return null
+      return {
+        boards: Array.isArray(jsonData.boards) ? jsonData.boards.length : 0,
+        columns: jsonData.columns.length,
+        tasks: Array.isArray(jsonData.tasks) ? jsonData.tasks.length : 0
       }
-      return false
+    },
+    async importWorkspace(jsonData) {
+      if (!this.describeWorkspace(jsonData)) return false
+      // Snapshot first so a wrong-file import is recoverable.
+      await this.saveSnapshot('before import')
+      this.$patch(migrateData(jsonData))
+      await this.saveData()
+      this.applyTheme()
+      return true
     },
 
     async factoryReset(force = false) {
@@ -404,7 +469,9 @@ export const useBoardStore = defineStore('board', {
          colMapping[c.id] = newColId
          this.columns.push({ ...c, id: newColId, boardId: newBoardId })
       })
-      this.tasks.filter(t => colMapping[t.columnId]).forEach(t => {
+      // Only active tasks: archived ones merely retain their old columnId and
+      // belong to the Global Archive — copying them would duplicate the archive.
+      this.tasks.filter(t => !t.isArchived && colMapping[t.columnId]).forEach(t => {
          this.tasks.push({ ...t, id: generateId('task'), columnId: colMapping[t.columnId] })
       })
       this.settings.activeBoardId = newBoardId
@@ -431,9 +498,11 @@ export const useBoardStore = defineStore('board', {
     deleteColumn(id) {
       const removedColumn = this.columns.find(c => c.id === id)
       if (!removedColumn) return
-      const removedTasks = this.tasks.filter(t => t.columnId === id)
+      // Archived tasks keep their original columnId but belong to the Global
+      // Archive — they must survive, exactly as deleteActiveBoard preserves them.
+      const removedTasks = this.tasks.filter(t => t.columnId === id && !t.isArchived)
       this.columns = this.columns.filter(c => c.id !== id)
-      this.tasks = this.tasks.filter(t => t.columnId !== id)
+      this.tasks = this.tasks.filter(t => !(t.columnId === id && !t.isArchived))
       this.pushUndo('Column deleted', () => {
         this.columns.push(removedColumn)
         this.tasks.push(...removedTasks)
