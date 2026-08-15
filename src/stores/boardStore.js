@@ -559,8 +559,17 @@ export const useBoardStore = defineStore('board', {
       let target = this.columns.filter(c => c.boardId === task.originalBoardId).sort((a, b) => a.order - b.order)
       if (target.length === 0) target = this.activeColumns
       if (target.length === 0) return
+      const columnId = target[0].id
       task.isArchived = false
-      task.columnId = target[0].id
+      task.columnId = columnId
+      // Place at the end. Keeping the order it had when archived made a restored
+      // card reappear above cards that were already there.
+      const siblings = this.tasks.filter(t => t.columnId === columnId && !t.isArchived && t.id !== task.id)
+      task.order = siblings.length ? Math.max(...siblings.map(t => t.order ?? 0)) + 1 : 0
+      // It's no longer archived, so a stale archivedAt would skew the archive's
+      // date sorting if it is ever archived again.
+      task.archivedAt = null
+      this.syncClosedAt(task.id)
     },
     archiveAllInColumn(columnId) {
       const col = this.columns.find(c => c.id === columnId)

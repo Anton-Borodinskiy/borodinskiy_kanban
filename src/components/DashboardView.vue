@@ -22,11 +22,14 @@ const taskStatusData = computed(() => {
 
 const assigneeData = computed(() => {
   const labels = store.assignees.map(a => a.name)
-  const data = store.assignees.map(a => store.tasks.filter(t => t.assigneeIds?.includes(a.id)).length)
+  // Current workload means open work — counting archived tasks here inflated it
+  // with everything the person had ever completed.
+  const active = store.tasks.filter(t => !t.isArchived)
+  const data = store.assignees.map(a => active.filter(t => t.assigneeIds?.includes(a.id)).length)
   return {
     labels,
     datasets: [{
-      label: 'Tasks Assigned',
+      label: 'Open tasks assigned',
       backgroundColor: store.assignees.map(a => a.color),
       data
     }]
@@ -42,8 +45,9 @@ const chartOptions = { responsive: true, maintainAspectRatio: false }
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
       <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-        <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Total Tasks</h3>
-        <p class="text-3xl font-bold text-gray-900 dark:text-white">{{ store.tasks.length }}</p>
+        <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Open Tasks</h3>
+        <p class="text-3xl font-bold text-gray-900 dark:text-white">{{ store.tasks.length - store.archivedTasks.length }}</p>
+        <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">{{ store.archivedTasks.length }} archived</p>
       </div>
       <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
         <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Active Boards</h3>
@@ -61,7 +65,7 @@ const chartOptions = { responsive: true, maintainAspectRatio: false }
         <div class="flex-1 relative"><Pie :data="taskStatusData" :options="chartOptions" /></div>
       </div>
       <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col">
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Workload by Assignee</h3>
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Current Workload by Assignee</h3>
         <div class="flex-1 relative"><Bar :data="assigneeData" :options="chartOptions" /></div>
       </div>
     </div>
